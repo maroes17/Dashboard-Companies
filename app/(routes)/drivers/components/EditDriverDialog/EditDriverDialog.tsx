@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Driver } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,28 +22,50 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-interface NewDriverDialogProps {
+interface EditDriverDialogProps {
+  driver: Driver | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSave: (driver: Driver) => void;
+  onSave: (updatedDriver: Driver) => void;
 }
 
-export function NewDriverDialog({ open, onOpenChange, onSave }: NewDriverDialogProps) {
-  const [formData, setFormData] = useState({
+export function EditDriverDialog({ driver, open, onOpenChange, onSave }: EditDriverDialogProps) {
+  const [formData, setFormData] = useState<Omit<Driver, 'id_chofer' | 'creado_en'>>({
     nombre_completo: "",
     documento_identidad: "",
     tipo_licencia: "",
     vencimiento_licencia: "",
     telefono: "",
     email: "",
-    nacionalidad: "Chilena",
+    nacionalidad: "",
     direccion: "",
     fecha_nacimiento: "",
-    fecha_ingreso: new Date().toISOString().split('T')[0], // Fecha actual como valor predeterminado
+    fecha_ingreso: "",
     contacto_emergencia: "",
-    estado: "activo" as "activo" | "inactivo" | "suspendido",
+    estado: "activo",
     observaciones: "",
   });
+
+  // Cargar los datos del chofer cuando cambie el driver seleccionado o se abra el diálogo
+  useEffect(() => {
+    if (driver && open) {
+      setFormData({
+        nombre_completo: driver.nombre_completo,
+        documento_identidad: driver.documento_identidad,
+        tipo_licencia: driver.tipo_licencia || "",
+        vencimiento_licencia: driver.vencimiento_licencia || "",
+        telefono: driver.telefono || "",
+        email: driver.email || "",
+        nacionalidad: driver.nacionalidad || "",
+        direccion: driver.direccion || "",
+        fecha_nacimiento: driver.fecha_nacimiento || "",
+        fecha_ingreso: driver.fecha_ingreso || "",
+        contacto_emergencia: driver.contacto_emergencia || "",
+        estado: driver.estado || "activo",
+        observaciones: driver.observaciones || "",
+      });
+    }
+  }, [driver, open]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -57,41 +79,28 @@ export function NewDriverDialog({ open, onOpenChange, onSave }: NewDriverDialogP
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    // En una implementación real, esto se enviaría a Supabase
-    const newDriver: Driver = {
-      id_chofer: Date.now(), // En realidad esto lo generaría Supabase
+    if (!driver) return;
+    
+    // Crear objeto actualizado manteniendo id y creado_en originales
+    const updatedDriver: Driver = {
+      id_chofer: driver.id_chofer,
+      creado_en: driver.creado_en,
       ...formData,
-      creado_en: new Date().toISOString(),
     };
     
-    onSave(newDriver);
-    
-    // Resetear el formulario
-    setFormData({
-      nombre_completo: "",
-      documento_identidad: "",
-      tipo_licencia: "",
-      vencimiento_licencia: "",
-      telefono: "",
-      email: "",
-      nacionalidad: "Chilena",
-      direccion: "",
-      fecha_nacimiento: "",
-      fecha_ingreso: new Date().toISOString().split('T')[0],
-      contacto_emergencia: "",
-      estado: "activo",
-      observaciones: "",
-    });
+    onSave(updatedDriver);
   };
+
+  if (!driver) return null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
-            <DialogTitle>Nuevo Chofer</DialogTitle>
+            <DialogTitle>Editar Chofer</DialogTitle>
             <DialogDescription>
-              Completa la información para registrar un nuevo chofer en el sistema.
+              Modifica la información del chofer en el sistema.
             </DialogDescription>
           </DialogHeader>
           
@@ -266,7 +275,7 @@ export function NewDriverDialog({ open, onOpenChange, onSave }: NewDriverDialogP
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancelar
             </Button>
-            <Button type="submit">Guardar</Button>
+            <Button type="submit">Guardar Cambios</Button>
           </DialogFooter>
         </form>
       </DialogContent>

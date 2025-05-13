@@ -9,7 +9,12 @@ import {
   FileText, 
   Calendar, 
   Settings, 
-  HelpCircle 
+  HelpCircle,
+  Box,
+  FileCheck,
+  Building2,
+  AlertTriangle,
+  Wrench
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
@@ -21,8 +26,23 @@ const DEFAULT_SECTIONS: SidebarSectionType[] = [
     title: "General",
     items: [
       { icon: LayoutDashboard, label: "Dashboard", href: "/" },
-      { icon: Users, label: "Choferes", href: "/drivers" },
-      { icon: Truck, label: "Vehículos", href: "/vehicles" }
+      { icon: Users, label: "Choferes", href: "/drivers" }
+    ]
+  },
+  {
+    title: "Vehículos",
+    items: [
+      { icon: Truck, label: "Flota", href: "/fleet" },
+      { icon: Box, label: "Semirremolques", href: "/trailers" },
+      { icon: Wrench, label: "Mantenimientos", href: "/maintenance" }
+    ]
+  },
+  {
+    title: "Documentación",
+    items: [
+      { icon: FileCheck, label: "Pólizas", href: "/policies" },
+      { icon: Building2, label: "Clientes", href: "/clients" },
+      { icon: AlertTriangle, label: "Incidentes", href: "/incidents" }
     ]
   },
   {

@@ -7,13 +7,21 @@ const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUz
 export const supabase = createClient(supabaseUrl, supabaseKey);
 
 export type Driver = {
-  id: string;
-  name: string;
-  phone: string;
-  email: string;
-  status: 'active' | 'inactive';
-  license_number: string;
-  created_at: string;
+  id_chofer: number;
+  nombre_completo: string;
+  documento_identidad: string;
+  tipo_licencia?: string;
+  vencimiento_licencia?: string; // Formato ISO YYYY-MM-DD
+  telefono?: string;
+  email?: string;
+  nacionalidad?: string;
+  direccion?: string;
+  fecha_nacimiento?: string; // Formato ISO YYYY-MM-DD
+  fecha_ingreso?: string; // Formato ISO YYYY-MM-DD
+  contacto_emergencia?: string;
+  estado?: 'activo' | 'inactivo' | 'suspendido';
+  observaciones?: string;
+  creado_en: string; // Timestamp ISO
 };
 
 export type Vehicle = {
