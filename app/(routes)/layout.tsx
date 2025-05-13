@@ -1,6 +1,6 @@
 import React from "react"; 
 import { Navbar } from "@/components/Navbar";
-import { Sidebar } from "@/components/Sidebar/Sidebar";
+import { Sidebar } from "@/components/Sidebar";
 
 export default function LayoutDashboard({
     children,
