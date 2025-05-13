@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { MoreHorizontal, User, Mail, Phone, CheckCircle, XCircle, FileText, Calendar, AlertTriangle } from "lucide-react";
+import { MoreHorizontal, User, Mail, Phone, CheckCircle, XCircle, FileText, Calendar, AlertTriangle, Trash2 } from "lucide-react";
 import { Driver } from "@/lib/supabase";
 import {
   Table,
@@ -17,6 +17,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
@@ -24,9 +25,17 @@ interface DriversListProps {
   drivers: Driver[];
   onViewDetails: (driver: Driver) => void;
   onEditDriver: (driver: Driver) => void;
+  onToggleStatus: (driver: Driver) => void;
+  onDeleteDriver: (driver: Driver) => void;
 }
 
-export function DriversList({ drivers, onViewDetails, onEditDriver }: DriversListProps) {
+export function DriversList({ 
+  drivers, 
+  onViewDetails, 
+  onEditDriver, 
+  onToggleStatus, 
+  onDeleteDriver 
+}: DriversListProps) {
   // Función para formatear fecha
   const formatDate = (dateString?: string) => {
     if (!dateString) return "No disponible";
@@ -67,6 +76,14 @@ export function DriversList({ drivers, onViewDetails, onEditDriver }: DriversLis
     const today = new Date();
     const expiry = new Date(expiryDate);
     return expiry < today;
+  };
+  
+  // Obtener el texto del botón de toggle status
+  const getToggleStatusText = (estado?: string) => {
+    if (estado === "activo") return "Desactivar";
+    if (estado === "inactivo") return "Activar";
+    if (estado === "suspendido") return "Activar";
+    return "Cambiar estado";
   };
 
   return (
@@ -190,8 +207,19 @@ export function DriversList({ drivers, onViewDetails, onEditDriver }: DriversLis
                       </DropdownMenuItem>
                       <DropdownMenuItem>Asignar vehículo</DropdownMenuItem>
                       <DropdownMenuItem>Registrar gastos</DropdownMenuItem>
-                      <DropdownMenuItem className="text-red-600">
-                        {driver.estado === "activo" ? "Desactivar" : "Activar"}
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem 
+                        className={driver.estado === "activo" ? "text-red-600" : "text-green-600"}
+                        onClick={() => onToggleStatus(driver)}
+                      >
+                        {getToggleStatusText(driver.estado)}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem 
+                        className="text-red-600"
+                        onClick={() => onDeleteDriver(driver)}
+                      >
+                        <Trash2 className="h-3.5 w-3.5 mr-2" />
+                        Eliminar
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
