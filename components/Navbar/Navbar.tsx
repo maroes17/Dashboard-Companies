@@ -9,15 +9,15 @@ export function Navbar() {
     return (
         <div className="flex items-center px-4 gap-x-4 md:px-6 justify-between w-full bg-background h-20 border-b">
             <div className="flex items-center gap-x-2">
-                <div className="block md:hidden">
-                    <Sheet>
+            <div className="block md:hidden">
+                <Sheet>
                         <SheetTrigger className="flex items-center p-2 hover:bg-slate-100 rounded-lg">
                             <Menu className="h-5 w-5" />
-                        </SheetTrigger>
+                    </SheetTrigger>
                         <SheetContent side="left" className="p-0 w-64">
                             <Sidebar />
-                        </SheetContent>
-                    </Sheet>
+                    </SheetContent>
+                </Sheet>
                 </div>
                 <h1 className="text-xl font-bold md:hidden">TransporteApp</h1>
             </div>

@@ -48,7 +48,7 @@ export default function Home() {
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between">
-        <div>
+    <div>
           <h2 className="text-3xl font-bold">Dashboard</h2>
           <p className="text-muted-foreground">Resumen de actividad y finanzas</p>
         </div>

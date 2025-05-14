@@ -2,9 +2,9 @@
 
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Search, Filter, UserPlus, FilterX, Loader2 } from "lucide-react";
+import { Search, Filter, UserPlus, FilterX } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { Driver } from "@/lib/supabase";
+import { Driver, supabase } from "@/lib/supabase";
 import { DriversList } from "./components/DriversList";
 import { NewDriverDialog } from "./components/NewDriverDialog";
 import { DriverDetailsDialog } from "./components/DriverDetailsDialog";
@@ -13,7 +13,6 @@ import { DriversFilterDialog } from "./components/DriversFilterDialog";
 import { ConfirmActionDialog } from "./components/ConfirmActionDialog";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/use-toast";
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 
 // Definir la interfaz DriversFilter localmente
 interface DriversFilter {
@@ -28,9 +27,8 @@ interface DriversFilter {
 
 export default function DriversPage() {
   const { toast } = useToast();
-  const supabase = createClientComponentClient();
   const [drivers, setDrivers] = useState<Driver[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [isNewDriverDialogOpen, setIsNewDriverDialogOpen] = useState(false);
   
@@ -55,54 +53,110 @@ export default function DriversPage() {
   const [deleteDriver, setDeleteDriver] = useState<Driver | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
-  // Cargar datos de choferes desde Supabase al iniciar
+  // Cargar datos desde Supabase
   useEffect(() => {
     const fetchDrivers = async () => {
       try {
-        setLoading(true);
+        setIsLoading(true);
+        console.log('Iniciando carga de choferes desde Supabase...');
+        
+        // Intentar consultar la tabla en el esquema público
         const { data, error } = await supabase
-          .from('choferes')
+          .from('public.choferes')
           .select('*');
-          
+        
+        console.log('Respuesta de Supabase (esquema público):', { data, error });
+        
+        // Si hay error, probar sin especificar esquema
         if (error) {
-          console.error('Error al cargar choferes:', error);
-          toast({
-            title: "Error al cargar datos",
-            description: error.message,
-            variant: "destructive"
-          });
+          console.log('Intentando consulta sin especificar esquema...');
+          const { data: dataAlt, error: errorAlt } = await supabase
+            .from('choferes')
+            .select('*');
+          
+          console.log('Respuesta alternativa:', { data: dataAlt, error: errorAlt });
+          
+          if (errorAlt) {
+            console.error('Error al cargar choferes:', errorAlt);
+            toast({
+              title: "Error al cargar datos",
+              description: errorAlt.message,
+              variant: "destructive",
+            });
+            return;
+          }
+          
+          if (!dataAlt || dataAlt.length === 0) {
+            console.log('No se encontraron choferes en la respuesta alternativa');
+            setDrivers([]);
+            return;
+          }
+          
+          // Procesar datos de la consulta alternativa
+          const formattedDataAlt: Driver[] = dataAlt.map(item => ({
+            id_chofer: item.id_chofer,
+            nombre_completo: item.nombre_completo,
+            documento_identidad: item.documento_identidad,
+            tipo_licencia: item.tipo_licencia,
+            vencimiento_licencia: item.vencimiento_licencia,
+            telefono: item.telefono,
+            email: item.email,
+            nacionalidad: item.nacionalidad,
+            direccion: item.direccion,
+            fecha_nacimiento: item.fecha_nacimiento,
+            fecha_ingreso: item.fecha_ingreso,
+            contacto_emergencia: item.contacto_emergencia,
+            estado: item.estado as "activo" | "inactivo" | "suspendido",
+            observaciones: item.observaciones,
+            creado_en: item.creado_en,
+          }));
+          
+          console.log('Datos formateados (alt):', formattedDataAlt);
+          setDrivers(formattedDataAlt);
           return;
         }
         
-        // Mapear los datos al formato Driver si es necesario
-        const formattedData = data.map((driver: any) => ({
-          id_chofer: driver.id_chofer,
-          nombre_completo: driver.nombre_completo,
-          documento_identidad: driver.documento_identidad,
-          tipo_licencia: driver.tipo_licencia,
-          vencimiento_licencia: driver.vencimiento_licencia,
-          telefono: driver.telefono,
-          email: driver.email,
-          nacionalidad: driver.nacionalidad,
-          direccion: driver.direccion,
-          fecha_nacimiento: driver.fecha_nacimiento,
-          fecha_ingreso: driver.fecha_ingreso,
-          contacto_emergencia: driver.contacto_emergencia,
-          estado: driver.estado,
-          observaciones: driver.observaciones,
-          creado_en: driver.creado_en
+        if (!data || data.length === 0) {
+          console.log('No se encontraron choferes en la respuesta');
+          setDrivers([]);
+          return;
+        }
+        
+        // Convertir los datos al formato Driver
+        const formattedData: Driver[] = data.map(item => ({
+          id_chofer: item.id_chofer,
+          nombre_completo: item.nombre_completo,
+          documento_identidad: item.documento_identidad,
+          tipo_licencia: item.tipo_licencia,
+          vencimiento_licencia: item.vencimiento_licencia,
+          telefono: item.telefono,
+          email: item.email,
+          nacionalidad: item.nacionalidad,
+          direccion: item.direccion,
+          fecha_nacimiento: item.fecha_nacimiento,
+          fecha_ingreso: item.fecha_ingreso,
+          contacto_emergencia: item.contacto_emergencia,
+          estado: item.estado as "activo" | "inactivo" | "suspendido",
+          observaciones: item.observaciones,
+          creado_en: item.creado_en,
         }));
         
-        setDrivers(formattedData || []);
-      } catch (err) {
-        console.error('Error inesperado:', err);
+        console.log('Datos formateados:', formattedData);
+        setDrivers(formattedData);
+      } catch (error) {
+        console.error('Error inesperado:', error);
+        toast({
+          title: "Error",
+          description: "Ocurrió un error al cargar los datos de choferes",
+          variant: "destructive",
+        });
       } finally {
-        setLoading(false);
+        setIsLoading(false);
       }
     };
     
     fetchDrivers();
-  }, [supabase, toast]);
+  }, [toast]);
 
   // Función para verificar si una licencia está próxima a vencer (menos de 30 días)
   const isLicenseSoonToExpire = (expiryDate?: string) => {
@@ -206,6 +260,7 @@ export default function DriversPage() {
       
       if (error) throw error;
       
+      // Actualizar el estado local
       setDrivers(prev => 
         prev.map(driver => 
           driver.id_chofer === updatedDriver.id_chofer ? updatedDriver : driver
@@ -222,7 +277,7 @@ export default function DriversPage() {
       console.error('Error al actualizar chofer:', error);
       toast({
         title: "Error al actualizar",
-        description: error.message || "Ha ocurrido un error al actualizar el chofer",
+        description: error.message || "No se pudo actualizar el chofer",
         variant: "destructive",
         duration: 3000,
       });
@@ -231,18 +286,37 @@ export default function DriversPage() {
 
   const addDriver = async (newDriver: Driver) => {
     try {
-      // Eliminar id_chofer para que Supabase lo genere automáticamente
-      const { id_chofer, creado_en, ...driverData } = newDriver;
-      
       const { data, error } = await supabase
         .from('choferes')
-        .insert([driverData])
+        .insert([{
+          nombre_completo: newDriver.nombre_completo,
+          documento_identidad: newDriver.documento_identidad,
+          tipo_licencia: newDriver.tipo_licencia,
+          vencimiento_licencia: newDriver.vencimiento_licencia,
+          telefono: newDriver.telefono,
+          email: newDriver.email,
+          nacionalidad: newDriver.nacionalidad,
+          direccion: newDriver.direccion,
+          fecha_nacimiento: newDriver.fecha_nacimiento,
+          fecha_ingreso: newDriver.fecha_ingreso,
+          contacto_emergencia: newDriver.contacto_emergencia,
+          estado: newDriver.estado,
+          observaciones: newDriver.observaciones
+        }])
         .select();
       
       if (error) throw error;
       
-      // Añadir el nuevo chofer con el id generado por Supabase
-      setDrivers(prev => [...prev, data[0]]);
+      // Añadir el nuevo chofer al estado local con el ID generado
+      if (data && data.length > 0) {
+        const insertedDriver = {
+          ...newDriver,
+          id_chofer: data[0].id_chofer,
+          creado_en: data[0].creado_en
+        };
+        setDrivers(prev => [...prev, insertedDriver]);
+      }
+      
       setIsNewDriverDialogOpen(false);
       
       toast({
@@ -254,7 +328,7 @@ export default function DriversPage() {
       console.error('Error al agregar chofer:', error);
       toast({
         title: "Error al agregar",
-        description: error.message || "Ha ocurrido un error al agregar el chofer",
+        description: error.message || "No se pudo agregar el chofer",
         variant: "destructive",
         duration: 3000,
       });
@@ -316,13 +390,14 @@ export default function DriversPage() {
       
       if (error) throw error;
       
+      // Actualizar el estado local
       const updatedDrivers = drivers.map(driver => 
         driver.id_chofer === statusDriver.id_chofer 
-          ? { ...driver, estado: newStatus }
+          ? { ...driver, estado: newStatus as "activo" | "inactivo" | "suspendido" }
           : driver
       );
       
-      setDrivers(updatedDrivers as Driver[]);
+      setDrivers(updatedDrivers);
       setIsStatusDialogOpen(false);
       
       toast({
@@ -331,10 +406,10 @@ export default function DriversPage() {
         duration: 3000,
       });
     } catch (error: any) {
-      console.error('Error al cambiar estado del chofer:', error);
+      console.error('Error al cambiar estado:', error);
       toast({
-        title: "Error al cambiar estado",
-        description: error.message || "Ha ocurrido un error al cambiar el estado del chofer",
+        title: "Error",
+        description: error.message || "No se pudo cambiar el estado del chofer",
         variant: "destructive",
         duration: 3000,
       });
@@ -358,6 +433,7 @@ export default function DriversPage() {
       
       if (error) throw error;
       
+      // Actualizar el estado local
       const updatedDrivers = drivers.filter(driver => 
         driver.id_chofer !== deleteDriver.id_chofer
       );
@@ -374,8 +450,8 @@ export default function DriversPage() {
     } catch (error: any) {
       console.error('Error al eliminar chofer:', error);
       toast({
-        title: "Error al eliminar",
-        description: error.message || "Ha ocurrido un error al eliminar el chofer",
+        title: "Error",
+        description: error.message || "No se pudo eliminar el chofer",
         variant: "destructive",
         duration: 3000,
       });
@@ -481,10 +557,10 @@ export default function DriversPage() {
         )}
       </div>
       
-      {loading ? (
-        <div className="flex justify-center items-center py-16">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-          <span className="ml-2 text-muted-foreground">Cargando choferes...</span>
+      {isLoading ? (
+        <div className="flex items-center justify-center py-10">
+          <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary"></div>
+          <span className="ml-3">Cargando choferes...</span>
         </div>
       ) : (
         <DriversList 

@@ -39,9 +39,6 @@ interface DriversFilterDialogProps {
   onApplyFilters: (filters: DriversFilter) => void;
 }
 
-// Lista de nacionalidades disponibles
-const NACIONALIDADES = ["Chilena", "Argentina", "Brasileña"];
-
 export function DriversFilterDialog({ 
   open, 
   onOpenChange, 
@@ -57,6 +54,8 @@ export function DriversFilterDialog({
     fecha_ingreso_desde: "",
     fecha_ingreso_hasta: ""
   });
+
+  const [nacionalidadInput, setNacionalidadInput] = useState("");
 
   // Cargar filtros activos al abrir el diálogo
   useEffect(() => {
@@ -123,21 +122,23 @@ export function DriversFilterDialog({
     }));
   };
 
-  // Manejar cambio en nacionalidad
-  const handleNacionalidadChange = (nacionalidad: string) => {
-    setFilters(prev => {
-      if (prev.nacionalidad?.includes(nacionalidad)) {
-        return {
-          ...prev,
-          nacionalidad: prev.nacionalidad.filter(n => n !== nacionalidad)
-        };
-      } else {
-        return {
-          ...prev,
-          nacionalidad: [...(prev.nacionalidad || []), nacionalidad]
-        };
-      }
-    });
+  // Agregar nacionalidad
+  const handleAddNacionalidad = () => {
+    if (nacionalidadInput.trim() && !filters.nacionalidad?.includes(nacionalidadInput.trim())) {
+      setFilters(prev => ({
+        ...prev,
+        nacionalidad: [...(prev.nacionalidad || []), nacionalidadInput.trim()]
+      }));
+      setNacionalidadInput("");
+    }
+  };
+
+  // Eliminar nacionalidad
+  const handleRemoveNacionalidad = (nacionalidad: string) => {
+    setFilters(prev => ({
+      ...prev,
+      nacionalidad: prev.nacionalidad?.filter(n => n !== nacionalidad)
+    }));
   };
 
   // Limpiar todos los filtros
@@ -247,19 +248,40 @@ export function DriversFilterDialog({
           {/* Nacionalidad */}
           <div className="space-y-3">
             <Label>Nacionalidad</Label>
-            <div className="flex flex-wrap gap-2">
-              {NACIONALIDADES.map((nacionalidad) => (
-                <Button
-                  key={nacionalidad}
-                  type="button"
-                  size="sm"
-                  variant={filters.nacionalidad?.includes(nacionalidad) ? "default" : "outline"}
-                  onClick={() => handleNacionalidadChange(nacionalidad)}
-                >
-                  {nacionalidad}
-                </Button>
-              ))}
+            <div className="flex gap-2">
+              <Input
+                value={nacionalidadInput}
+                onChange={(e) => setNacionalidadInput(e.target.value)}
+                placeholder="Añadir nacionalidad"
+                className="flex-1"
+              />
+              <Button 
+                type="button" 
+                onClick={handleAddNacionalidad}
+                disabled={!nacionalidadInput.trim()}
+              >
+                Añadir
+              </Button>
             </div>
+            {filters.nacionalidad && filters.nacionalidad.length > 0 && (
+              <div className="flex flex-wrap gap-2 mt-2">
+                {filters.nacionalidad.map((nac) => (
+                  <div 
+                    key={nac} 
+                    className="flex items-center rounded-full bg-slate-100 px-3 py-1 text-sm"
+                  >
+                    <span>{nac}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveNacionalidad(nac)}
+                      className="ml-2 text-slate-500 hover:text-slate-700"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
           
           {/* Fecha de Ingreso */}

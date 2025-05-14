@@ -29,9 +29,6 @@ interface NewDriverDialogProps {
   onSave: (driver: Driver) => void;
 }
 
-// Lista de nacionalidades disponibles
-const NACIONALIDADES = ["Chilena", "Argentina", "Brasileña"];
-
 export function NewDriverDialog({ open, onOpenChange, onSave }: NewDriverDialogProps) {
   const [formData, setFormData] = useState({
     nombre_completo: "",
@@ -202,24 +199,13 @@ export function NewDriverDialog({ open, onOpenChange, onSave }: NewDriverDialogP
                 <Label htmlFor="nacionalidad" className="flex items-center">
                   Nacionalidad <span className="text-red-500 ml-1">*</span>
                 </Label>
-                <Select 
-                  value={formData.nacionalidad} 
-                  onValueChange={(value) => handleSelectChange("nacionalidad", value)}
-                >
-                  <SelectTrigger 
-                    id="nacionalidad"
-                    className={errors.nacionalidad ? "border-red-500" : ""}
-                  >
-                    <SelectValue placeholder="Seleccionar nacionalidad" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {NACIONALIDADES.map((nacionalidad) => (
-                      <SelectItem key={nacionalidad} value={nacionalidad}>
-                        {nacionalidad}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Input
+                  id="nacionalidad"
+                  name="nacionalidad"
+                  value={formData.nacionalidad}
+                  onChange={handleChange}
+                  className={errors.nacionalidad ? "border-red-500" : ""}
+                />
                 {errors.nacionalidad && (
                   <div className="text-red-500 text-xs flex items-center mt-1">
                     <AlertCircle className="h-3.5 w-3.5 mr-1" />

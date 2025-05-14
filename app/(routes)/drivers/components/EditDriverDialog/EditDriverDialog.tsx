@@ -29,9 +29,6 @@ interface EditDriverDialogProps {
   onSave: (updatedDriver: Driver) => void;
 }
 
-// Lista de nacionalidades disponibles
-const NACIONALIDADES = ["Chilena", "Argentina", "Brasileña"];
-
 export function EditDriverDialog({ driver, open, onOpenChange, onSave }: EditDriverDialogProps) {
   const [formData, setFormData] = useState<Omit<Driver, 'id_chofer' | 'creado_en'>>({
     nombre_completo: "",
@@ -134,21 +131,13 @@ export function EditDriverDialog({ driver, open, onOpenChange, onSave }: EditDri
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="nacionalidad">Nacionalidad</Label>
-                <Select 
-                  value={formData.nacionalidad} 
-                  onValueChange={(value) => handleSelectChange("nacionalidad", value)}
-                >
-                  <SelectTrigger id="nacionalidad">
-                    <SelectValue placeholder="Seleccionar nacionalidad" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {NACIONALIDADES.map((nacionalidad) => (
-                      <SelectItem key={nacionalidad} value={nacionalidad}>
-                        {nacionalidad}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Input
+                  id="nacionalidad"
+                  name="nacionalidad"
+                  value={formData.nacionalidad}
+                  onChange={handleChange}
+                  required
+                />
               </div>
             </div>
 
@@ -274,7 +263,7 @@ export function EditDriverDialog({ driver, open, onOpenChange, onSave }: EditDri
               <Textarea
                 id="observaciones"
                 name="observaciones"
-                placeholder="Información adicional relevante sobre el chofer"
+                placeholder="Observaciones adicionales"
                 value={formData.observaciones}
                 onChange={handleChange}
                 rows={3}
