@@ -24,6 +24,67 @@ export type Driver = {
   creado_en: string; // Timestamp ISO
 };
 
+export type Fleet = {
+  id_flota: number;
+  tipo: string;
+  categoria?: string;
+  subcategoria?: string;
+  patente: string;
+  nro_chasis?: string;
+  marca: string;
+  modelo: string;
+  anio?: number;
+  capacidad?: string;
+  estado: 'activo' | 'inactivo' | 'mantenimiento' | 'en_reparacion' | 'dado_de_baja';
+  fecha_ingreso: string; // Formato ISO YYYY-MM-DD
+  id_chofer_asignado?: number;
+  km_actual?: number;
+  km_ultimo_servicio?: number;
+  km_proximo_servicio?: number;
+  fecha_ultima_mantencion?: string; // Formato ISO YYYY-MM-DD
+  fecha_proximo_mantenimiento?: string; // Formato ISO YYYY-MM-DD
+  vencimiento_revision_tecnica?: string; // Formato ISO YYYY-MM-DD
+  vencimiento_permiso_circulacion?: string; // Formato ISO YYYY-MM-DD
+  vencimiento_seguro?: string; // Formato ISO YYYY-MM-DD
+  consumo_promedio?: number;
+  origen?: string;
+  observaciones?: string;
+  creado_en: string; // Timestamp ISO
+  actualizado_en: string; // Timestamp ISO
+};
+
+export type FleetEvent = {
+  id_evento: number;
+  id_flota: number;
+  // cambio_estado_manual también se usa para registrar asignaciones de choferes
+  tipo_evento: 'mantenimiento_programado' | 'mantenimiento_correctivo' | 'incidente' | 'accidente' | 'revision' | 'reparacion' | 'actualizacion_km' | 'cambio_estado_manual';
+  fecha_inicio: string; // Timestamp ISO
+  fecha_fin?: string; // Timestamp ISO
+  kilometraje?: number;
+  descripcion?: string;
+  estado_resultante?: 'activo' | 'inactivo' | 'mantenimiento' | 'en_reparacion' | 'dado_de_baja';
+  resuelto: boolean;
+  id_responsable?: number;
+  creado_por?: number;
+  creado_en: string; // Timestamp ISO
+};
+
+export type FleetMaintenance = {
+  id_mantenimiento: number;
+  id_flota: number;
+  tipo_mantenimiento: 'preventivo' | 'correctivo' | 'revision';
+  fecha_programada: string; // Formato ISO YYYY-MM-DD
+  km_programado?: number;
+  fecha_realizado?: string; // Formato ISO YYYY-MM-DD
+  km_realizado?: number;
+  costo?: number;
+  descripcion?: string;
+  estado: 'programado' | 'en_proceso' | 'completado' | 'cancelado';
+  notas_tecnico?: string;
+  id_responsable?: number;
+  creado_en: string; // Timestamp ISO
+};
+
 export type Vehicle = {
   id: string;
   plate: string;

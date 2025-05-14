@@ -153,11 +153,11 @@ export function DriversList({
                       <Calendar className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
                       <span>Vence: </span>
                       {isLicenseExpired(driver.vencimiento_licencia) ? (
-                        <Badge variant="destructive" className="ml-1 text-xs">
+                        <Badge variant="state" className="ml-1 text-xs bg-red-100 text-red-800 dark:bg-red-800/30 dark:text-red-400 border-transparent">
                           {formatDate(driver.vencimiento_licencia)}
                         </Badge>
                       ) : isLicenseSoonToExpire(driver.vencimiento_licencia) ? (
-                        <Badge variant="outline" className="ml-1 text-xs bg-yellow-100 text-yellow-800 border-yellow-300">
+                        <Badge variant="state" className="ml-1 text-xs bg-yellow-100 text-yellow-800 border-yellow-300">
                           {formatDate(driver.vencimiento_licencia)}
                         </Badge>
                       ) : (
@@ -168,8 +168,13 @@ export function DriversList({
                 </TableCell>
                 <TableCell>
                   <Badge 
-                    variant={driver.estado === "activo" ? "success" : "destructive"}
-                    className="gap-1"
+                    variant={driver.estado === "activo" ? "state" : 
+                           driver.estado === "suspendido" ? "state" : "state"}
+                    className={
+                      driver.estado === "activo" ? "bg-green-100 text-green-800 dark:bg-green-800/30 dark:text-green-500 border-transparent gap-1" : 
+                      driver.estado === "suspendido" ? "bg-orange-100 text-orange-800 dark:bg-orange-800/30 dark:text-orange-500 border-transparent gap-1" :
+                      "bg-red-100 text-red-800 dark:bg-red-800/30 dark:text-red-400 border-transparent gap-1"
+                    }
                   >
                     {driver.estado === "activo" ? (
                       <>
@@ -209,13 +214,13 @@ export function DriversList({
                       <DropdownMenuItem>Registrar gastos</DropdownMenuItem>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem 
-                        className={driver.estado === "activo" ? "text-red-600" : "text-green-600"}
+                        className={driver.estado === "activo" ? "text-red-500" : "text-green-600"}
                         onClick={() => onToggleStatus(driver)}
                       >
                         {getToggleStatusText(driver.estado)}
                       </DropdownMenuItem>
                       <DropdownMenuItem 
-                        className="text-red-600"
+                        className="text-red-500"
                         onClick={() => onDeleteDriver(driver)}
                       >
                         <Trash2 className="h-3.5 w-3.5 mr-2" />
