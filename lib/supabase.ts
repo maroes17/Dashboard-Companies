@@ -127,4 +127,21 @@ export type Trip = {
   driver_id: string;
   vehicle_id: string;
   created_at: string;
+};
+
+export type Semirremolque = {
+  id_semirremolque: number;
+  patente: string;
+  nro_genset?: string;
+  tipo?: string;
+  marca?: string;
+  modelo?: string;
+  anio?: number;
+  estado?: 'activo' | 'inactivo' | 'mantenimiento' | 'en_reparacion' | 'dado_de_baja';
+  fecha_ingreso?: string; // Formato ISO YYYY-MM-DD
+  fecha_ultima_revision?: string; // Formato ISO YYYY-MM-DD
+  vencimiento_revision_tecnica?: string; // Formato ISO YYYY-MM-DD
+  observaciones?: string;
+  asignado_a_flota_id?: number;
+  creado_en: string; // Timestamp ISO
 }; 

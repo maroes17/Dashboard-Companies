@@ -33,7 +33,7 @@ const DEFAULT_SECTIONS: SidebarSectionType[] = [
     title: "Vehículos",
     items: [
       { icon: Truck, label: "Flota", href: "/fleet" },
-      { icon: Box, label: "Semirremolques", href: "/trailers" },
+      { icon: Box, label: "Semirremolques", href: "/semitrailers" },
       { icon: Wrench, label: "Mantenimientos", href: "/maintenance" }
     ]
   },

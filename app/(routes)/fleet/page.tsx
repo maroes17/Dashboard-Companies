@@ -2,9 +2,9 @@
 
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Search, Filter, PlusCircle, FilterX, MoreHorizontal, Trash2, UserCircle2 } from "lucide-react";
+import { Search, Filter, PlusCircle, FilterX, MoreHorizontal, Trash2, UserCircle2, Link, Truck } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { Fleet, Driver, supabase } from "@/lib/supabase";
+import { Fleet, Driver, Semirremolque, supabase } from "@/lib/supabase";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/use-toast";
 import { FleetFilterDialog } from "./components/FleetFilterDialog";
@@ -92,6 +92,9 @@ export default function FleetPage() {
   // Estado para manejo de asignación de chofer
   const [assignVehicle, setAssignVehicle] = useState<Fleet | null>(null);
   const [isAssignDriverDialogOpen, setIsAssignDriverDialogOpen] = useState(false);
+
+  // Estado para semirremolques
+  const [semirremolques, setSemirremolques] = useState<{[key: number]: Semirremolque}>({});
 
   // Cargar datos desde Supabase
   useEffect(() => {
@@ -196,6 +199,41 @@ export default function FleetPage() {
           });
           setDrivers(driversMap);
         }
+      }
+      
+      // Cargar semirremolques asignados a estos vehículos
+      const vehicleIds = formattedData.map(vehicle => vehicle.id_flota);
+      const { data: semitrailersData, error: semitrailersError } = await supabase
+        .from('semirremolques')
+        .select('*')
+        .filter('asignado_a_flota_id', 'in', `(${vehicleIds.join(',')})`);
+      
+      if (semitrailersError) {
+        console.error('Error al cargar semirremolques:', semitrailersError);
+      } else if (semitrailersData && semitrailersData.length > 0) {
+        // Crear un mapa de semirremolques para acceso rápido por ID de vehículo
+        const semitrailersMap: {[key: number]: Semirremolque} = {};
+        semitrailersData.forEach(semirremolque => {
+          if (semirremolque.asignado_a_flota_id) {
+            semitrailersMap[semirremolque.asignado_a_flota_id] = {
+              id_semirremolque: semirremolque.id_semirremolque,
+              patente: semirremolque.patente,
+              nro_genset: semirremolque.nro_genset,
+              tipo: semirremolque.tipo,
+              marca: semirremolque.marca,
+              modelo: semirremolque.modelo,
+              anio: semirremolque.anio,
+              estado: semirremolque.estado,
+              fecha_ingreso: semirremolque.fecha_ingreso,
+              fecha_ultima_revision: semirremolque.fecha_ultima_revision,
+              vencimiento_revision_tecnica: semirremolque.vencimiento_revision_tecnica,
+              observaciones: semirremolque.observaciones,
+              asignado_a_flota_id: semirremolque.asignado_a_flota_id,
+              creado_en: semirremolque.creado_en
+            };
+          }
+        });
+        setSemirremolques(semitrailersMap);
       }
       
       console.log('Datos formateados:', formattedData);
@@ -831,6 +869,7 @@ export default function FleetPage() {
                     <th className="h-12 px-4 text-left align-middle font-medium">Tipo</th>
                     <th className="h-12 px-4 text-left align-middle font-medium">Estado</th>
                     <th className="h-12 px-4 text-left align-middle font-medium">Chofer</th>
+                    <th className="h-12 px-4 text-left align-middle font-medium">Semirremolque</th>
                     <th className="h-12 px-4 text-left align-middle font-medium">Kilometraje</th>
                     <th className="h-12 px-4 text-left align-middle font-medium">Documentos</th>
                     <th className="h-12 px-4 text-center align-middle font-medium">Acciones</th>
@@ -894,6 +933,21 @@ export default function FleetPage() {
                           <span className="text-muted-foreground">Chofer #{vehicle.id_chofer_asignado}</span>
                         ) : (
                           <span className="text-muted-foreground">Sin asignar</span>
+                        )}
+                      </td>
+                      <td className="p-4 align-middle">
+                        {semirremolques[vehicle.id_flota] ? (
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              <Truck className="h-4 w-4 text-primary" />
+                              <span className="font-medium">{semirremolques[vehicle.id_flota].patente}</span>
+                            </div>
+                            <div className="text-sm text-muted-foreground">
+                              {semirremolques[vehicle.id_flota].marca} {semirremolques[vehicle.id_flota].modelo}
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground">No asignado</span>
                         )}
                       </td>
                       <td className="p-4 align-middle">
