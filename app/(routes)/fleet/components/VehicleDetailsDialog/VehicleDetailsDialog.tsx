@@ -12,8 +12,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Driver, Fleet, supabase } from "@/lib/supabase";
-import { Calendar, Gauge, Wrench, FileText, UserRound } from "lucide-react";
+import { Driver, Fleet, FleetEvent, Semirremolque, supabase } from "@/lib/supabase";
+import { Calendar, Gauge, Wrench, FileText, UserRound, Truck, Clock, AlertCircle } from "lucide-react";
 
 interface VehicleDetailsDialogProps {
   open: boolean;
@@ -31,6 +31,11 @@ export function VehicleDetailsDialog({
   const [assignedDriver, setAssignedDriver] = useState<Driver | null>(null);
   const [driverLoading, setDriverLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("general");
+  const [assignmentHistory, setAssignmentHistory] = useState<FleetEvent[]>([]);
+  const [assignmentHistoryLoading, setAssignmentHistoryLoading] = useState(false);
+  const [assignedSemitrailer, setAssignedSemitrailer] = useState<Semirremolque | null>(null);
+  const [semitrailerLoading, setSemitrailerLoading] = useState(false);
+  const [assignmentDrivers, setAssignmentDrivers] = useState<{[key: number]: Driver}>({});
 
   // Cambiar a la pestaña de asignaciones cuando abre el diálogo si viene desde la asignación
   useEffect(() => {
@@ -45,6 +50,17 @@ export function VehicleDetailsDialog({
       fetchDriverInfo(vehicle.id_chofer_asignado);
     } else {
       setAssignedDriver(null);
+    }
+  }, [open, vehicle]);
+
+  // Cargar historial de asignaciones
+  useEffect(() => {
+    if (open && vehicle?.id_flota) {
+      fetchAssignmentHistory(vehicle.id_flota);
+      fetchAssignedSemitrailer(vehicle.id_flota);
+    } else {
+      setAssignmentHistory([]);
+      setAssignedSemitrailer(null);
     }
   }, [open, vehicle]);
 
@@ -86,6 +102,140 @@ export function VehicleDetailsDialog({
       console.error("Error inesperado:", error);
     } finally {
       setDriverLoading(false);
+    }
+  };
+
+  const fetchAssignmentHistory = async (vehicleId: number) => {
+    try {
+      setAssignmentHistoryLoading(true);
+      
+      // Obtener eventos de asignación de chofer y cambios de estado
+      const { data, error } = await supabase
+        .from('eventos_flota')
+        .select('*')
+        .eq('id_flota', vehicleId)
+        .eq('tipo_evento', 'cambio_estado_manual')
+        .order('fecha_inicio', { ascending: false })
+        .limit(20);
+      
+      if (error) {
+        console.error("Error al cargar historial de asignaciones:", error);
+        return;
+      }
+      
+      if (data && data.length > 0) {
+        // Filtrar para solo incluir eventos de asignación de choferes y cambios de semirremolques
+        const assignmentEvents = data.filter(event => 
+          event.descripcion && (
+            event.descripcion.includes('ASIGNACIÓN DE CHOFER') || 
+            event.descripcion.includes('SEMIRREMOLQUE')
+          )
+        );
+        
+        setAssignmentHistory(assignmentEvents);
+        
+        // Obtener IDs de choferes mencionados en el historial
+        const driverIdsInEvents = assignmentEvents
+          .filter(event => event.descripcion?.includes('ASIGNACIÓN DE CHOFER') && event.descripcion?.includes('ID'))
+          .map(event => {
+            const match = event.descripcion?.match(/ID (\d+)/);
+            return match ? parseInt(match[1]) : null;
+          })
+          .filter((id): id is number => id !== null);
+        
+        // Si hay choferes en los eventos, cargar sus datos
+        if (driverIdsInEvents.length > 0) {
+          await fetchDriversForHistory(driverIdsInEvents);
+        }
+      } else {
+        setAssignmentHistory([]);
+      }
+    } catch (error) {
+      console.error("Error inesperado:", error);
+    } finally {
+      setAssignmentHistoryLoading(false);
+    }
+  };
+
+  const fetchDriversForHistory = async (driverIds: number[]) => {
+    try {
+      const { data, error } = await supabase
+        .from('choferes')
+        .select('*')
+        .in('id_chofer', driverIds);
+      
+      if (error) {
+        console.error("Error al cargar datos de choferes para historial:", error);
+        return;
+      }
+      
+      if (data && data.length > 0) {
+        const driversMap: {[key: number]: Driver} = {};
+        data.forEach(driver => {
+          driversMap[driver.id_chofer] = {
+            id_chofer: driver.id_chofer,
+            nombre_completo: driver.nombre_completo,
+            documento_identidad: driver.documento_identidad,
+            tipo_licencia: driver.tipo_licencia,
+            vencimiento_licencia: driver.vencimiento_licencia,
+            telefono: driver.telefono,
+            email: driver.email,
+            nacionalidad: driver.nacionalidad,
+            direccion: driver.direccion,
+            fecha_nacimiento: driver.fecha_nacimiento,
+            fecha_ingreso: driver.fecha_ingreso,
+            contacto_emergencia: driver.contacto_emergencia,
+            estado: driver.estado,
+            observaciones: driver.observaciones,
+            creado_en: driver.creado_en,
+          };
+        });
+        setAssignmentDrivers(driversMap);
+      }
+    } catch (error) {
+      console.error("Error inesperado:", error);
+    }
+  };
+
+  const fetchAssignedSemitrailer = async (vehicleId: number) => {
+    try {
+      setSemitrailerLoading(true);
+      
+      const { data, error } = await supabase
+        .from('semirremolques')
+        .select('*')
+        .eq('asignado_a_flota_id', vehicleId)
+        .maybeSingle();
+      
+      if (error) {
+        console.error("Error al cargar semirremolque asignado:", error);
+        return;
+      }
+      
+      if (data) {
+        setAssignedSemitrailer({
+          id_semirremolque: data.id_semirremolque,
+          patente: data.patente,
+          nro_genset: data.nro_genset,
+          tipo: data.tipo,
+          marca: data.marca,
+          modelo: data.modelo,
+          anio: data.anio,
+          estado: data.estado,
+          fecha_ingreso: data.fecha_ingreso,
+          fecha_ultima_revision: data.fecha_ultima_revision,
+          vencimiento_revision_tecnica: data.vencimiento_revision_tecnica,
+          observaciones: data.observaciones,
+          asignado_a_flota_id: data.asignado_a_flota_id,
+          creado_en: data.creado_en
+        });
+      } else {
+        setAssignedSemitrailer(null);
+      }
+    } catch (error) {
+      console.error("Error inesperado:", error);
+    } finally {
+      setSemitrailerLoading(false);
     }
   };
 
@@ -435,9 +585,136 @@ export function VehicleDetailsDialog({
                 )}
               </div>
 
+              {/* Semirremolque asignado */}
               <div className="border rounded-lg p-4">
-                <h3 className="font-medium mb-2">Historial de Asignaciones</h3>
-                <p className="text-muted-foreground">No hay datos de asignaciones previas</p>
+                <div className="flex justify-between items-center mb-3">
+                  <h3 className="font-medium flex items-center gap-2">
+                    <Truck className="h-5 w-5 text-green-500" />
+                    Semirremolque Asignado
+                  </h3>
+                </div>
+                
+                {semitrailerLoading ? (
+                  <div className="py-4 text-center text-muted-foreground">
+                    Cargando información del semirremolque...
+                  </div>
+                ) : assignedSemitrailer ? (
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="font-medium text-lg">{assignedSemitrailer.patente}</span>
+                      <Badge 
+                        variant="state"
+                        className={
+                          assignedSemitrailer.estado === "activo" ? "bg-green-100 text-green-800 dark:bg-green-800/30 dark:text-green-500 border-transparent" :
+                          assignedSemitrailer.estado === "mantenimiento" ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-800/30 dark:text-yellow-500 border-transparent" :
+                          assignedSemitrailer.estado === "en_reparacion" ? "bg-orange-100 text-orange-800 dark:bg-orange-800/30 dark:text-orange-500 border-transparent" :
+                          assignedSemitrailer.estado === "inactivo" ? "bg-gray-100 text-gray-800 dark:bg-gray-800/30 dark:text-gray-500 border-transparent" :
+                          "bg-red-100 text-red-800 dark:bg-red-800/30 dark:text-red-400 border-transparent" // dado_de_baja
+                        }
+                      >
+                        {assignedSemitrailer.estado?.replace("_", " ")}
+                      </Badge>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-3 pt-2">
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium">Tipo</p>
+                        <p>{assignedSemitrailer.tipo || "No registrado"}</p>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium">Marca/Modelo</p>
+                        <p>{assignedSemitrailer.marca || ""} {assignedSemitrailer.modelo || ""}</p>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium">Año</p>
+                        <p>{assignedSemitrailer.anio || "No registrado"}</p>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium">Nº Genset</p>
+                        <p>{assignedSemitrailer.nro_genset || "No registrado"}</p>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="py-4 text-center space-y-2">
+                    <p className="text-muted-foreground">No hay semirremolque asignado actualmente</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Historial de asignaciones */}
+              <div className="border rounded-lg p-4">
+                <h3 className="font-medium mb-3 flex items-center gap-2">
+                  <Clock className="h-5 w-5 text-purple-500" />
+                  Historial de Asignaciones
+                </h3>
+                
+                {assignmentHistoryLoading ? (
+                  <div className="py-4 text-center text-muted-foreground">
+                    Cargando historial de asignaciones...
+                  </div>
+                ) : assignmentHistory.length > 0 ? (
+                  <div className="space-y-3">
+                    {assignmentHistory.map((event) => {
+                      // Extraer ID del chofer si está disponible en la descripción
+                      let driverInfo = null;
+                      if (event.descripcion?.includes('ASIGNACIÓN DE CHOFER')) {
+                        const match = event.descripcion?.match(/ID (\d+)/);
+                        if (match && assignmentDrivers[parseInt(match[1])]) {
+                          driverInfo = assignmentDrivers[parseInt(match[1])];
+                        }
+                      }
+                      
+                      return (
+                        <div key={event.id_evento} className="border-b pb-3 last:border-b-0 last:pb-0">
+                          <div className="flex justify-between">
+                            <div className="flex items-start gap-2">
+                              {event.descripcion?.includes('ASIGNACIÓN DE CHOFER') ? (
+                                <UserRound className="h-4 w-4 mt-1 text-blue-500" />
+                              ) : event.descripcion?.includes('SEMIRREMOLQUE') ? (
+                                <Truck className="h-4 w-4 mt-1 text-green-500" />
+                              ) : (
+                                <AlertCircle className="h-4 w-4 mt-1 text-orange-500" />
+                              )}
+                              <div>
+                                <p className="text-sm">
+                                  {event.descripcion?.includes('Asignación de chofer ID') ? (
+                                    <>
+                                      {driverInfo ? (
+                                        <span>
+                                          Asignación de chofer: <span className="font-medium">{driverInfo.nombre_completo}</span>
+                                        </span>
+                                      ) : (
+                                        <span>
+                                          {event.descripcion}
+                                        </span>
+                                      )}
+                                    </>
+                                  ) : event.descripcion?.includes('Remoción de chofer') ? (
+                                    <span>Chofer removido del vehículo</span>
+                                  ) : (
+                                    <span>{event.descripcion}</span>
+                                  )}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  {new Date(event.fecha_inicio).toLocaleDateString('es-ES', {
+                                    day: '2-digit',
+                                    month: 'short',
+                                    year: 'numeric',
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                  })}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground">No hay datos de asignaciones previas</p>
+                )}
               </div>
             </div>
           </TabsContent>

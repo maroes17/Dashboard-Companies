@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Semirremolque, Fleet, supabase } from "@/lib/supabase";
+import { Semirremolque, Fleet, FleetEvent, supabase } from "@/lib/supabase";
 import {
   Dialog,
   DialogContent,
@@ -15,7 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { CalendarIcon, AlertCircle, Link } from "lucide-react";
+import { CalendarIcon, AlertCircle, Link, Clock, Truck, UserCircle2 } from "lucide-react";
 
 interface SemitrailerDetailsDialogProps {
   open: boolean;
@@ -33,6 +33,8 @@ export function SemitrailerDetailsDialog({
   const [assignedVehicle, setAssignedVehicle] = useState<Fleet | null>(null);
   const [vehicleLoading, setVehicleLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("general");
+  const [assignmentHistory, setAssignmentHistory] = useState<FleetEvent[]>([]);
+  const [assignmentHistoryLoading, setAssignmentHistoryLoading] = useState(false);
 
   // Cargar información del vehículo asignado si existe
   useEffect(() => {
@@ -40,6 +42,15 @@ export function SemitrailerDetailsDialog({
       fetchVehicleInfo(semitrailer.asignado_a_flota_id);
     } else {
       setAssignedVehicle(null);
+    }
+  }, [open, semitrailer]);
+
+  // Cargar historial de asignaciones
+  useEffect(() => {
+    if (open && semitrailer?.id_semirremolque) {
+      fetchAssignmentHistory(semitrailer.id_semirremolque);
+    } else {
+      setAssignmentHistory([]);
     }
   }, [open, semitrailer]);
 
@@ -92,6 +103,66 @@ export function SemitrailerDetailsDialog({
       console.error("Error inesperado:", error);
     } finally {
       setVehicleLoading(false);
+    }
+  };
+
+  const fetchAssignmentHistory = async (semitrailerId: number) => {
+    try {
+      setAssignmentHistoryLoading(true);
+      
+      // Si el semirremolque tiene un vehículo asignado, buscamos eventos relacionados con ese vehículo
+      if (semitrailer?.asignado_a_flota_id) {
+        const { data, error } = await supabase
+          .from('eventos_flota')
+          .select('*')
+          .eq('id_flota', semitrailer.asignado_a_flota_id)
+          .eq('tipo_evento', 'cambio_estado_manual')
+          .like('descripcion', '%SEMIRREMOLQUE%')
+          .order('fecha_inicio', { ascending: false })
+          .limit(10);
+        
+        if (error) {
+          console.error("Error al cargar historial de asignaciones:", error);
+          return;
+        }
+        
+        if (data && data.length > 0) {
+          // Filtrar eventos relacionados con este semirremolque en particular
+          const relevantEvents = data.filter(event => 
+            event.descripcion?.includes(semitrailer.patente) || 
+            (semitrailer.id_semirremolque && event.descripcion?.includes(`#${semitrailer.id_semirremolque}`))
+          );
+          
+          setAssignmentHistory(relevantEvents);
+        } else {
+          setAssignmentHistory([]);
+        }
+      } else {
+        // Buscar en todos los eventos para encontrar referencias a este semirremolque
+        // (en caso de que haya estado asignado a otros vehículos en el pasado)
+        const { data, error } = await supabase
+          .from('eventos_flota')
+          .select('*')
+          .eq('tipo_evento', 'cambio_estado_manual')
+          .like('descripcion', `%SEMIRREMOLQUE%${semitrailer?.patente || ''}%`)
+          .order('fecha_inicio', { ascending: false })
+          .limit(10);
+        
+        if (error) {
+          console.error("Error al cargar historial de asignaciones:", error);
+          return;
+        }
+        
+        if (data && data.length > 0) {
+          setAssignmentHistory(data);
+        } else {
+          setAssignmentHistory([]);
+        }
+      }
+    } catch (error) {
+      console.error("Error inesperado:", error);
+    } finally {
+      setAssignmentHistoryLoading(false);
     }
   };
 
@@ -244,7 +315,21 @@ export function SemitrailerDetailsDialog({
           
           <TabsContent value="assignments" className="space-y-4 pt-4">
             <div className="border rounded-lg p-4">
-              <h3 className="font-medium mb-2">Vehículo asignado</h3>
+              <div className="flex justify-between items-center mb-3">
+                <h3 className="font-medium flex items-center gap-2">
+                  <Truck className="h-5 w-5 text-blue-500" />
+                  Vehículo asignado
+                </h3>
+                {onAssignVehicle && (
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => onAssignVehicle(semitrailer)}
+                  >
+                    {semitrailer.asignado_a_flota_id ? "Cambiar asignación" : "Asignar a vehículo"}
+                  </Button>
+                )}
+              </div>
               
               {semitrailer.asignado_a_flota_id ? (
                 vehicleLoading ? (
@@ -252,23 +337,27 @@ export function SemitrailerDetailsDialog({
                 ) : assignedVehicle ? (
                   <div className="space-y-2">
                     <div className="flex justify-between items-center">
-                      <div>
+                      <div className="flex items-center gap-2">
                         <span className="font-medium">{assignedVehicle.patente}</span>
-                        <p className="text-sm text-muted-foreground">
-                          {assignedVehicle.marca} {assignedVehicle.modelo} {assignedVehicle.anio}
-                        </p>
+                        <Badge 
+                          variant="outline" 
+                          className={
+                            assignedVehicle.estado === "activo" ? "bg-green-50 text-green-700" :
+                            assignedVehicle.estado === "mantenimiento" ? "bg-yellow-50 text-yellow-700" :
+                            assignedVehicle.estado === "en_reparacion" ? "bg-orange-50 text-orange-700" :
+                            assignedVehicle.estado === "inactivo" ? "bg-gray-50 text-gray-700" :
+                            "bg-red-50 text-red-700" // dado_de_baja
+                          }
+                        >
+                          {assignedVehicle.estado.replace("_", " ")}
+                        </Badge>
                       </div>
-                      <Badge variant="outline" className={
-                        assignedVehicle.estado === "activo" ? "bg-green-50 text-green-700" :
-                        assignedVehicle.estado === "mantenimiento" ? "bg-yellow-50 text-yellow-700" :
-                        assignedVehicle.estado === "en_reparacion" ? "bg-orange-50 text-orange-700" :
-                        assignedVehicle.estado === "inactivo" ? "bg-gray-50 text-gray-700" :
-                        "bg-red-50 text-red-700" // dado_de_baja
-                      }>
-                        {assignedVehicle.estado.replace("_", " ")}
-                      </Badge>
                     </div>
                     
+                    <p className="text-sm text-muted-foreground">
+                      {assignedVehicle.marca} {assignedVehicle.modelo} {assignedVehicle.anio}
+                    </p>
+
                     <div className="grid grid-cols-2 gap-2 text-sm mt-2">
                       <div>
                         <span className="text-muted-foreground">Tipo: </span>
@@ -286,15 +375,12 @@ export function SemitrailerDetailsDialog({
                       </div>
                     </div>
                     
-                    {onAssignVehicle && (
-                      <div className="flex justify-end mt-2">
-                        <Button 
-                          variant="outline" 
-                          size="sm"
-                          onClick={() => onAssignVehicle(semitrailer)}
-                        >
-                          Cambiar asignación
-                        </Button>
+                    {/* Mostrar chofer asignado al vehículo si existe */}
+                    {assignedVehicle.id_chofer_asignado && (
+                      <div className="flex items-center gap-2 mt-2 text-sm">
+                        <UserCircle2 className="h-4 w-4 text-primary" />
+                        <span className="text-muted-foreground">Chofer asignado al vehículo:</span>
+                        <span>ID #{assignedVehicle.id_chofer_asignado}</span>
                       </div>
                     )}
                   </div>
@@ -307,24 +393,48 @@ export function SemitrailerDetailsDialog({
               ) : (
                 <div className="py-4 text-center space-y-2">
                   <p className="text-muted-foreground">No hay vehículo asignado actualmente</p>
-                  {onAssignVehicle && (
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      onClick={() => onAssignVehicle(semitrailer)}
-                      className="mt-2"
-                    >
-                      <Link className="h-4 w-4 mr-2" />
-                      Asignar a vehículo
-                    </Button>
-                  )}
                 </div>
               )}
             </div>
 
+            {/* Historial de asignaciones */}
             <div className="border rounded-lg p-4">
-              <h3 className="font-medium mb-2">Historial de Asignaciones</h3>
-              <p className="text-muted-foreground">No hay datos de asignaciones previas</p>
+              <h3 className="font-medium mb-3 flex items-center gap-2">
+                <Clock className="h-5 w-5 text-purple-500" />
+                Historial de Asignaciones
+              </h3>
+              
+              {assignmentHistoryLoading ? (
+                <div className="py-4 text-center text-muted-foreground">
+                  Cargando historial de asignaciones...
+                </div>
+              ) : assignmentHistory.length > 0 ? (
+                <div className="space-y-3">
+                  {assignmentHistory.map((event) => (
+                    <div key={event.id_evento} className="border-b pb-3 last:border-b-0 last:pb-0">
+                      <div className="flex justify-between">
+                        <div className="flex items-start gap-2">
+                          <Truck className="h-4 w-4 mt-1 text-green-500" />
+                          <div>
+                            <p className="text-sm">{event.descripcion}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {new Date(event.fecha_inicio).toLocaleDateString('es-ES', {
+                                day: '2-digit',
+                                month: 'short',
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-muted-foreground">No hay datos de asignaciones previas</p>
+              )}
             </div>
           </TabsContent>
         </Tabs>

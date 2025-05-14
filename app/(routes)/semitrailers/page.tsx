@@ -509,6 +509,9 @@ export default function SemitrailersPage() {
     try {
       setIsAssignVehicleLoading(true);
       
+      // Preparar la fecha actual para el evento
+      const now = new Date().toISOString();
+      
       // Actualizar la asignación en la base de datos
       const { error } = await supabase
         .from('semirremolques')
@@ -516,6 +519,33 @@ export default function SemitrailersPage() {
         .eq('id_semirremolque', semitrailerId);
       
       if (error) throw error;
+      
+      // Obtener información del semirremolque para el evento
+      const { data: semitrailerData } = await supabase
+        .from('semirremolques')
+        .select('patente')
+        .eq('id_semirremolque', semitrailerId)
+        .single();
+        
+      // Registrar el evento en eventos_flota si hay un vehículo asignado
+      if (fleetId) {
+        const descripcion = `[SEMIRREMOLQUE] Asignación de semirremolque ${semitrailerData?.patente || '#' + semitrailerId} al vehículo`;
+        
+        const { error: eventError } = await supabase
+          .from('eventos_flota')
+          .insert({
+            id_flota: fleetId,
+            tipo_evento: 'cambio_estado_manual',
+            fecha_inicio: now,
+            descripcion: descripcion,
+            resuelto: true
+          });
+          
+        if (eventError) {
+          console.error('Error al registrar evento de asignación:', eventError);
+          // No lanzamos error para no interrumpir el flujo principal
+        }
+      }
       
       // Actualizar el estado local
       setSemitrailers(prev => 
@@ -626,12 +656,12 @@ export default function SemitrailersPage() {
                 <thead className="[&_tr]:border-b">
                   <tr className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted">
                     <th className="h-12 px-4 text-left align-middle font-medium">Patente</th>
-                    <th className="h-12 px-4 text-left align-middle font-medium">Marca/Modelo</th>
-                    <th className="h-12 px-4 text-left align-middle font-medium">Tipo</th>
+                    <th className="h-12 px-4 text-left align-middle font-medium hidden sm:table-cell">Marca/Modelo</th>
+                    <th className="h-12 px-4 text-left align-middle font-medium hidden md:table-cell">Tipo</th>
                     <th className="h-12 px-4 text-left align-middle font-medium">Estado</th>
-                    <th className="h-12 px-4 text-left align-middle font-medium">Genset</th>
-                    <th className="h-12 px-4 text-left align-middle font-medium">Asignado a</th>
-                    <th className="h-12 px-4 text-left align-middle font-medium">Documentos</th>
+                    <th className="h-12 px-4 text-left align-middle font-medium hidden lg:table-cell">Genset</th>
+                    <th className="h-12 px-4 text-left align-middle font-medium hidden md:table-cell">Asignado a</th>
+                    <th className="h-12 px-4 text-left align-middle font-medium hidden lg:table-cell">Documentos</th>
                     <th className="h-12 px-4 text-center align-middle font-medium">Acciones</th>
                   </tr>
                 </thead>
@@ -641,14 +671,21 @@ export default function SemitrailersPage() {
                       key={semitrailer.id_semirremolque} 
                       className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted"
                     >
-                      <td className="p-4 align-middle">{semitrailer.patente}</td>
                       <td className="p-4 align-middle">
+                        <div>
+                          <span className="font-medium">{semitrailer.patente}</span>
+                          <div className="text-xs text-muted-foreground sm:hidden">
+                            {semitrailer.marca} {semitrailer.modelo} {semitrailer.anio}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="p-4 align-middle hidden sm:table-cell">
                         <div>
                           <span className="font-medium">{semitrailer.marca || "-"}</span>
                           <span className="block text-muted-foreground">{semitrailer.modelo} {semitrailer.anio}</span>
                         </div>
                       </td>
-                      <td className="p-4 align-middle">
+                      <td className="p-4 align-middle hidden md:table-cell">
                         {semitrailer.tipo || "-"}
                       </td>
                       <td className="p-4 align-middle">
@@ -669,7 +706,7 @@ export default function SemitrailersPage() {
                           <span className="text-muted-foreground">-</span>
                         )}
                       </td>
-                      <td className="p-4 align-middle">
+                      <td className="p-4 align-middle hidden lg:table-cell">
                         {semitrailer.nro_genset ? (
                           <Badge variant="outline" className="bg-blue-50 text-blue-800 border-blue-200">
                             {semitrailer.nro_genset}
@@ -678,7 +715,7 @@ export default function SemitrailersPage() {
                           <span className="text-muted-foreground">Sin genset</span>
                         )}
                       </td>
-                      <td className="p-4 align-middle">
+                      <td className="p-4 align-middle hidden md:table-cell">
                         {semitrailer.asignado_a_flota_id && fleet[semitrailer.asignado_a_flota_id] ? (
                           <div className="space-y-1">
                             <div className="flex items-center gap-2">
@@ -706,7 +743,7 @@ export default function SemitrailersPage() {
                           <span className="text-muted-foreground">No asignado</span>
                         )}
                       </td>
-                      <td className="p-4 align-middle">
+                      <td className="p-4 align-middle hidden lg:table-cell">
                         <div className="flex flex-col gap-1">
                           {isRevisionExpired(semitrailer.vencimiento_revision_tecnica) && (
                             <Badge variant="state" className="text-xs w-fit bg-red-100 text-red-800 dark:bg-red-800/30 dark:text-red-400 border-transparent">Rev. técnica vencida</Badge>

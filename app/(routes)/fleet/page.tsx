@@ -865,13 +865,13 @@ export default function FleetPage() {
                 <thead className="[&_tr]:border-b">
                   <tr className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted">
                     <th className="h-12 px-4 text-left align-middle font-medium">Patente</th>
-                    <th className="h-12 px-4 text-left align-middle font-medium">Marca/Modelo</th>
-                    <th className="h-12 px-4 text-left align-middle font-medium">Tipo</th>
+                    <th className="h-12 px-4 text-left align-middle font-medium hidden sm:table-cell">Marca/Modelo</th>
+                    <th className="h-12 px-4 text-left align-middle font-medium hidden md:table-cell">Tipo</th>
                     <th className="h-12 px-4 text-left align-middle font-medium">Estado</th>
-                    <th className="h-12 px-4 text-left align-middle font-medium">Chofer</th>
-                    <th className="h-12 px-4 text-left align-middle font-medium">Semirremolque</th>
-                    <th className="h-12 px-4 text-left align-middle font-medium">Kilometraje</th>
-                    <th className="h-12 px-4 text-left align-middle font-medium">Documentos</th>
+                    <th className="h-12 px-4 text-left align-middle font-medium hidden md:table-cell">Chofer</th>
+                    <th className="h-12 px-4 text-left align-middle font-medium hidden lg:table-cell">Semirremolque</th>
+                    <th className="h-12 px-4 text-left align-middle font-medium hidden sm:table-cell">Kilometraje</th>
+                    <th className="h-12 px-4 text-left align-middle font-medium hidden lg:table-cell">Documentos</th>
                     <th className="h-12 px-4 text-center align-middle font-medium">Acciones</th>
                   </tr>
                 </thead>
@@ -881,14 +881,21 @@ export default function FleetPage() {
                       key={vehicle.id_flota} 
                       className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted"
                     >
-                      <td className="p-4 align-middle">{vehicle.patente}</td>
                       <td className="p-4 align-middle">
+                        <div>
+                          <span className="font-medium">{vehicle.patente}</span>
+                          <div className="text-xs text-muted-foreground sm:hidden">
+                            {vehicle.marca} {vehicle.modelo} {vehicle.anio}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="p-4 align-middle hidden sm:table-cell">
                         <div>
                           <span className="font-medium">{vehicle.marca}</span>
                           <span className="block text-muted-foreground">{vehicle.modelo} {vehicle.anio}</span>
                         </div>
                       </td>
-                      <td className="p-4 align-middle">
+                      <td className="p-4 align-middle hidden md:table-cell">
                         <div>
                           <span className="font-medium">{vehicle.tipo}</span>
                           {vehicle.categoria && (
@@ -910,7 +917,7 @@ export default function FleetPage() {
                           {vehicle.estado.replace("_", " ")}
                         </Badge>
                       </td>
-                      <td className="p-4 align-middle">
+                      <td className="p-4 align-middle hidden md:table-cell">
                         {vehicle.id_chofer_asignado && drivers[vehicle.id_chofer_asignado] ? (
                           <div className="flex items-center gap-2">
                             <UserCircle2 className="h-4 w-4 text-primary" />
@@ -935,7 +942,7 @@ export default function FleetPage() {
                           <span className="text-muted-foreground">Sin asignar</span>
                         )}
                       </td>
-                      <td className="p-4 align-middle">
+                      <td className="p-4 align-middle hidden lg:table-cell">
                         {semirremolques[vehicle.id_flota] ? (
                           <div className="space-y-1">
                             <div className="flex items-center gap-2">
@@ -950,10 +957,10 @@ export default function FleetPage() {
                           <span className="text-muted-foreground">No asignado</span>
                         )}
                       </td>
-                      <td className="p-4 align-middle">
+                      <td className="p-4 align-middle hidden sm:table-cell">
                         {vehicle.km_actual?.toLocaleString()} km
                       </td>
-                      <td className="p-4 align-middle">
+                      <td className="p-4 align-middle hidden lg:table-cell">
                         <div className="flex flex-col gap-1">
                           {isDocumentExpired(vehicle.vencimiento_revision_tecnica) && (
                             <Badge variant="state" className="text-xs w-fit bg-red-100 text-red-800 dark:bg-red-800/30 dark:text-red-400 border-transparent">Rev. técnica vencida</Badge>

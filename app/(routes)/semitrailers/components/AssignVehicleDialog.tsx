@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/select";
 import { Search, AlertCircle, Truck } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
+import { Badge } from "@/components/ui/badge";
 
 interface AssignVehicleDialogProps {
   semitrailer: Semirremolque | null;
@@ -45,6 +46,7 @@ export function AssignVehicleDialog({
   const [updating, setUpdating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [currentAssignedVehicle, setCurrentAssignedVehicle] = useState<Fleet | null>(null);
+  const [assignedVehicleIds, setAssignedVehicleIds] = useState<number[]>([]);
 
   // Resetear el estado cuando el diálogo se cierra
   useEffect(() => {
@@ -100,6 +102,7 @@ export function AssignVehicleDialog({
       
       // 3. Identificar vehículos que ya tienen semirremolques asignados
       const assignedVehicleIds = semitrailersData.map(s => s.asignado_a_flota_id);
+      setAssignedVehicleIds(assignedVehicleIds as number[]);
       
       // 4. Filtrar para tener solo vehículos disponibles (no tienen semirremolque asignado)
       // Incluye también el vehículo actualmente asignado al semirremolque actual (si existe)
@@ -223,142 +226,88 @@ export function AssignVehicleDialog({
             </div>
           )}
           
-          <div className="relative">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              type="search"
-              placeholder="Buscar por patente, marca o modelo..."
-              className="pl-8"
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-            />
+          <div className="space-y-2">
+            <Label htmlFor="search">Buscar vehículo</Label>
+            <div className="relative">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                id="search"
+                type="search"
+                placeholder="Buscar por patente o marca..."
+                className="pl-8"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
           </div>
           
           <div className="border rounded-md">
-            <div className="flex justify-between items-center p-2 border-b">
-              <Label className="font-medium">Vehículo actual:</Label>
-              <div>
-                {semitrailer?.asignado_a_flota_id ? (
-                  <span>
-                    {currentAssignedVehicle?.patente 
-                      ? `${currentAssignedVehicle.marca} ${currentAssignedVehicle.modelo} (${currentAssignedVehicle.patente})` 
-                      : `Vehículo #${semitrailer.asignado_a_flota_id}`}
-                    {selectedVehicleId === null && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="ml-2 h-7 text-red-500 hover:text-red-700"
-                        onClick={() => setSelectedVehicleId(semitrailer.asignado_a_flota_id ?? null)}
-                      >
-                        Restaurar
-                      </Button>
-                    )}
-                  </span>
-                ) : (
-                  <span className="text-muted-foreground">No hay vehículo asignado</span>
-                )}
-              </div>
-            </div>
-            
-            <div className="p-2 border-b">
-              <Label className="font-medium mb-2 block">Seleccionar acción:</Label>
-              <div className="grid grid-cols-2 gap-2">
-                <Button 
-                  variant={selectedVehicleId !== null ? "default" : "outline"} 
-                  className="w-full justify-start"
-                  onClick={() => {
-                    let nextVehicleId: number | null = null;
-                    if (selectedVehicleId === null) {
-                      if (semitrailer?.asignado_a_flota_id) {
-                        nextVehicleId = semitrailer.asignado_a_flota_id;
-                      } else if (filteredVehicles.length > 0) {
-                        nextVehicleId = filteredVehicles[0].id_flota;
-                      }
-                    } else {
-                      nextVehicleId = selectedVehicleId;
-                    }
-                    setSelectedVehicleId(nextVehicleId);
-                  }}
-                  disabled={filteredVehicles.length === 0}
-                >
-                  <Truck className="mr-2 h-4 w-4" />
-                  Asignar vehículo
-                </Button>
-                <Button 
-                  variant={selectedVehicleId === null ? "default" : "outline"} 
-                  className="w-full justify-start"
-                  onClick={() => setSelectedVehicleId(null)}
-                >
-                  <Truck className="mr-2 h-4 w-4" />
-                  Remover asignación
-                </Button>
-              </div>
-            </div>
-            
-            {selectedVehicleId !== null && (
-              <div>
-                <div className="p-2">
-                  <Label className="font-medium mb-2 block">Seleccionar vehículo:</Label>
-                  {isLoading ? (
-                    <div className="py-2 text-center text-muted-foreground">
-                      Cargando vehículos disponibles...
-                    </div>
-                  ) : filteredVehicles.length > 0 ? (
-                    <>
-                      <Select
-                        value={selectedVehicleId.toString() || ""}
-                        onValueChange={(value) => setSelectedVehicleId(parseInt(value))}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecciona un vehículo" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {filteredVehicles.map(vehicle => (
-                            <SelectItem key={vehicle.id_flota} value={vehicle.id_flota.toString()}>
-                              {vehicle.patente} - {vehicle.marca} {vehicle.modelo} {vehicle.anio}
-                              {vehicle.estado && vehicle.estado !== 'activo' && 
-                                ` - ${vehicle.estado.replace('_', ' ')}`
-                              }
-                              {vehicle.id_flota === semitrailer?.asignado_a_flota_id && " (Actual)"}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <p className="text-sm text-muted-foreground mt-2">
-                        Solo se muestran vehículos sin semirremolque asignado.
-                      </p>
-                    </>
-                  ) : (
-                    <div className="py-2 text-center text-muted-foreground border-b">
-                      {searchQuery.trim() !== "" 
-                        ? "No se encontraron vehículos que coincidan con la búsqueda" 
-                        : "No hay vehículos disponibles para asignar"}
-                    </div>
-                  )}
+            <div className="max-h-[300px] overflow-y-auto">
+              {isLoading ? (
+                <div className="p-4 text-center">
+                  <p className="text-sm text-muted-foreground">Cargando vehículos...</p>
                 </div>
-                
-                {selectedVehicleId && (
-                  <div className="p-2 border-t">
-                    <div className="text-sm">
-                      <p className="text-muted-foreground">Información del vehículo seleccionado:</p>
-                      {(() => {
-                        const vehicle = vehicles.find(v => v.id_flota === selectedVehicleId);
-                        if (!vehicle) return <p>Vehículo no encontrado</p>;
-                        
-                        return (
-                          <div className="mt-1 space-y-1">
-                            <p><span className="font-medium">Patente:</span> {vehicle.patente}</p>
-                            <p><span className="font-medium">Marca/Modelo:</span> {vehicle.marca} {vehicle.modelo} {vehicle.anio}</p>
-                            <p><span className="font-medium">Tipo:</span> {vehicle.tipo || '-'}</p>
-                            <p><span className="font-medium">Estado:</span> {vehicle.estado?.replace('_', ' ') || '-'}</p>
+              ) : filteredVehicles.length === 0 ? (
+                <div className="p-4 text-center">
+                  <p className="text-sm text-muted-foreground">No se encontraron vehículos disponibles</p>
+                </div>
+              ) : (
+                <div className="divide-y">
+                  {filteredVehicles.map((vehicle) => {
+                    // Verificar si el vehículo tiene un semirremolque asignado
+                    const hasSemitrailer = assignedVehicleIds.includes(vehicle.id_flota) && 
+                                          vehicle.id_flota !== semitrailer?.asignado_a_flota_id;
+                    
+                    return (
+                      <div 
+                        key={vehicle.id_flota}
+                        className={`p-3 flex justify-between items-center hover:bg-accent cursor-pointer ${
+                          hasSemitrailer 
+                            ? "opacity-50" 
+                            : selectedVehicleId === vehicle.id_flota 
+                              ? "bg-accent/30" 
+                              : ""
+                        }`}
+                        onClick={() => {
+                          if (!hasSemitrailer) {
+                            setSelectedVehicleId(vehicle.id_flota);
+                          }
+                        }}
+                      >
+                        <div className="flex-grow">
+                          <div className="flex items-center gap-2">
+                            <Truck className={`h-4 w-4 ${
+                              vehicle.estado === "activo" ? "text-green-500" :
+                              vehicle.estado === "mantenimiento" ? "text-yellow-500" :
+                              vehicle.estado === "en_reparacion" ? "text-orange-500" :
+                              "text-gray-500"
+                            }`} />
+                            <span className="font-medium">{vehicle.patente}</span>
+                            <Badge variant="outline" className="ml-1 h-5 py-0 px-2">
+                              {vehicle.estado.replace("_", " ")}
+                            </Badge>
                           </div>
-                        );
-                      })()}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
+                          <div className="text-sm text-muted-foreground mt-1">
+                            {vehicle.marca} {vehicle.modelo} {vehicle.anio && `(${vehicle.anio})`}
+                          </div>
+                          {hasSemitrailer && (
+                            <div className="flex items-center gap-1 mt-1 text-xs text-red-500">
+                              <AlertCircle className="h-3 w-3" />
+                              <span>Este vehículo ya tiene un semirremolque asignado</span>
+                            </div>
+                          )}
+                        </div>
+                        <div>
+                          {vehicle.id_flota === semitrailer?.asignado_a_flota_id && (
+                            <Badge className="bg-primary">Asignado</Badge>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         </div>
         
