@@ -40,7 +40,7 @@ const DEFAULT_SECTIONS: SidebarSectionType[] = [
   {
     title: "Documentación",
     items: [
-      { icon: FileCheck, label: "Pólizas", href: "/policies" },
+      { icon: FileCheck, label: "Pólizas", href: "/polizas" },
       { icon: Building2, label: "Clientes", href: "/clients" },
       { icon: AlertTriangle, label: "Incidentes", href: "/incidents" }
     ]

@@ -144,4 +144,37 @@ export type Semirremolque = {
   observaciones?: string;
   asignado_a_flota_id?: number;
   creado_en: string; // Timestamp ISO
+};
+
+export type Poliza = {
+  id_poliza: number;
+  aplica_a: 'flota' | 'semirremolque';
+  patente: string;
+  aseguradora?: string;
+  nro_poliza?: string;
+  vigencia_desde?: string; // Formato ISO YYYY-MM-DD
+  vigencia_hasta?: string; // Formato ISO YYYY-MM-DD
+  importe_pagado?: number;
+  fecha_pago?: string; // Formato ISO YYYY-MM-DD
+  estado?: 'vigente' | 'vencida' | 'renovada' | 'cancelada';
+  observaciones?: string;
+  creado_en: string; // Timestamp ISO
+};
+
+export type Cliente = {
+  id_cliente: number;
+  razon_social: string;
+  rut?: string;
+  nombre_fantasia?: string;
+  direccion?: string;
+  ciudad?: string;
+  pais?: string;
+  telefono?: string;
+  email?: string;
+  contacto_principal?: string;
+  telefono_contacto?: string;
+  email_contacto?: string;
+  estado?: 'activo' | 'inactivo' | 'suspendido';
+  observaciones?: string;
+  creado_en: string; // Timestamp ISO
 }; 
