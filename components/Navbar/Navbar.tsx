@@ -1,11 +1,14 @@
+"use client";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { Menu, Search, Bell, Sun, Moon, ChevronDown } from "lucide-react";
+import { Menu, Search, Bell, Sun, Moon, ChevronDown, LogOut } from "lucide-react";
 import { Button } from "../ui/button";
 import { Sidebar } from "../Sidebar";
-import { UserButton } from "@clerk/nextjs";
+import { useSupabase } from "@/lib/supabase-provider";
 
 export function Navbar() {
+    const { signOut } = useSupabase();
+
     return (
         <div className="flex items-center px-4 gap-x-4 md:px-6 justify-between w-full bg-background h-20 border-b">
             <div className="flex items-center gap-x-2">
@@ -35,7 +38,9 @@ export function Navbar() {
                     </Button>
                 </div>
                 <div className="flex items-center gap-x-2">
-                    <UserButton afterSignOutUrl="/" />
+                    <Button variant="ghost" size="icon" onClick={() => signOut()}>
+                        <LogOut className="h-5 w-5" />
+                    </Button>
                 </div>
             </div>
         </div>

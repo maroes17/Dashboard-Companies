@@ -15,7 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { CalendarIcon, AlertCircle, Link, Clock, Truck, UserCircle2 } from "lucide-react";
+import { CalendarIcon, AlertCircle, Link, Clock, Truck, UserCircle2, LinkIcon, Unlink } from "lucide-react";
 
 interface SemitrailerDetailsDialogProps {
   open: boolean;
@@ -110,57 +110,63 @@ export function SemitrailerDetailsDialog({
     try {
       setAssignmentHistoryLoading(true);
       
-      // Si el semirremolque tiene un vehículo asignado, buscamos eventos relacionados con ese vehículo
+      // Necesitamos dos consultas: una para eventos del vehículo asignado actual
+      // y otra para eventos históricos que mencionen este semirremolque
+      let combinedEvents: FleetEvent[] = [];
+      
+      // 1. Si el semirremolque tiene un vehículo asignado, buscar eventos relacionados con ese vehículo
       if (semitrailer?.asignado_a_flota_id) {
-        const { data, error } = await supabase
+        const { data: currentVehicleEvents, error: currentVehicleError } = await supabase
           .from('eventos_flota')
           .select('*')
           .eq('id_flota', semitrailer.asignado_a_flota_id)
           .eq('tipo_evento', 'cambio_estado_manual')
           .like('descripcion', '%SEMIRREMOLQUE%')
-          .order('fecha_inicio', { ascending: false })
-          .limit(10);
+          .order('fecha_inicio', { ascending: false });
         
-        if (error) {
-          console.error("Error al cargar historial de asignaciones:", error);
-          return;
-        }
-        
-        if (data && data.length > 0) {
+        if (currentVehicleError) {
+          console.error("Error al cargar eventos del vehículo actual:", currentVehicleError);
+        } else if (currentVehicleEvents && currentVehicleEvents.length > 0) {
           // Filtrar eventos relacionados con este semirremolque en particular
-          const relevantEvents = data.filter(event => 
+          const relevantEvents = currentVehicleEvents.filter(event => 
             event.descripcion?.includes(semitrailer.patente) || 
             (semitrailer.id_semirremolque && event.descripcion?.includes(`#${semitrailer.id_semirremolque}`))
           );
           
-          setAssignmentHistory(relevantEvents);
-        } else {
-          setAssignmentHistory([]);
-        }
-      } else {
-        // Buscar en todos los eventos para encontrar referencias a este semirremolque
-        // (en caso de que haya estado asignado a otros vehículos en el pasado)
-        const { data, error } = await supabase
-          .from('eventos_flota')
-          .select('*')
-          .eq('tipo_evento', 'cambio_estado_manual')
-          .like('descripcion', `%SEMIRREMOLQUE%${semitrailer?.patente || ''}%`)
-          .order('fecha_inicio', { ascending: false })
-          .limit(10);
-        
-        if (error) {
-          console.error("Error al cargar historial de asignaciones:", error);
-          return;
-        }
-        
-        if (data && data.length > 0) {
-          setAssignmentHistory(data);
-        } else {
-          setAssignmentHistory([]);
+          combinedEvents = [...relevantEvents];
         }
       }
+      
+      // 2. Buscar en todos los eventos para encontrar referencias a este semirremolque
+      // (en caso de que haya estado asignado a otros vehículos en el pasado)
+      const { data: historicalEvents, error: historicalError } = await supabase
+        .from('eventos_flota')
+        .select('*')
+        .eq('tipo_evento', 'cambio_estado_manual')
+        .like('descripcion', `%SEMIRREMOLQUE%${semitrailer?.patente || ''}%`)
+        .order('fecha_inicio', { ascending: false });
+      
+      if (historicalError) {
+        console.error("Error al cargar historial de asignaciones:", historicalError);
+      } else if (historicalEvents && historicalEvents.length > 0) {
+        // Filtrar duplicados si ya tenemos algunos eventos del vehículo actual
+        const newEvents = historicalEvents.filter(histEvent => 
+          !combinedEvents.some(existingEvent => existingEvent.id_evento === histEvent.id_evento)
+        );
+        
+        combinedEvents = [...combinedEvents, ...newEvents];
+      }
+      
+      // Ordenar todos los eventos por fecha, más recientes primero
+      combinedEvents.sort((a, b) => 
+        new Date(b.fecha_inicio).getTime() - new Date(a.fecha_inicio).getTime()
+      );
+      
+      // Limitar a 20 eventos para no sobrecargar la interfaz
+      setAssignmentHistory(combinedEvents.slice(0, 20));
     } catch (error) {
       console.error("Error inesperado:", error);
+      setAssignmentHistory([]);
     } finally {
       setAssignmentHistoryLoading(false);
     }
@@ -293,15 +299,23 @@ export function SemitrailerDetailsDialog({
                     <>
                       <CalendarIcon className="h-4 w-4" />
                       {formatDate(semitrailer.vencimiento_revision_tecnica)}
-                      {isRevisionExpired(semitrailer.vencimiento_revision_tecnica) && (
-                        <Badge variant="outline" className="ml-2 bg-red-50 text-red-700 border-red-200">Vencida</Badge>
-                      )}
-                      {isRevisionSoonToExpire(semitrailer.vencimiento_revision_tecnica) && (
-                        <Badge variant="outline" className="ml-2 bg-yellow-50 text-yellow-700 border-yellow-200">Próxima a vencer</Badge>
-                      )}
                     </>
                   ) : "-"}
                 </p>
+                {semitrailer.vencimiento_revision_tecnica && (
+                  <>
+                    {isRevisionExpired(semitrailer.vencimiento_revision_tecnica) && (
+                      <div className="mt-1">
+                        <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">Vencida</Badge>
+                      </div>
+                    )}
+                    {isRevisionSoonToExpire(semitrailer.vencimiento_revision_tecnica) && (
+                      <div className="mt-1">
+                        <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">Próxima a vencer</Badge>
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             </div>
             
@@ -410,27 +424,116 @@ export function SemitrailerDetailsDialog({
                 </div>
               ) : assignmentHistory.length > 0 ? (
                 <div className="space-y-3">
-                  {assignmentHistory.map((event) => (
-                    <div key={event.id_evento} className="border-b pb-3 last:border-b-0 last:pb-0">
-                      <div className="flex justify-between">
-                        <div className="flex items-start gap-2">
-                          <Truck className="h-4 w-4 mt-1 text-green-500" />
-                          <div>
-                            <p className="text-sm">{event.descripcion}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {new Date(event.fecha_inicio).toLocaleDateString('es-ES', {
-                                day: '2-digit',
-                                month: 'short',
-                                year: 'numeric',
-                                hour: '2-digit',
-                                minute: '2-digit'
-                              })}
-                            </p>
+                  {assignmentHistory.map((event) => {
+                    // Extraer información del vehículo del mensaje de descripción
+                    let vehicleInfo = "";
+                    let eventAction = "";
+                    let eventType = "other"; // "assigned", "unassigned", "other"
+                    let alreadyContainsVehicle = false; // Bandera para indicar si ya contiene la patente
+                    
+                    if (event.descripcion) {
+                      // Verificar si el mensaje ya termina con un patrón de patente
+                      const endsWithPatternMatch = event.descripcion.match(/\s+([A-Z0-9-]{5,8})$/i);
+                      if (endsWithPatternMatch && endsWithPatternMatch[1]) {
+                        alreadyContainsVehicle = true;
+                        vehicleInfo = endsWithPatternMatch[1];
+                      }
+                      
+                      // Detectar el tipo de acción (asignación, desasignación, etc.)
+                      if (event.descripcion.includes("Asignación de semirremolque")) {
+                        eventAction = "asignado a";
+                        eventType = "assigned";
+                      } else if (event.descripcion.includes("Desasignación de semirremolque")) {
+                        eventAction = "desasignado de";
+                        eventType = "unassigned";
+                      }
+                      
+                      // Si no se ha encontrado ya una patente al final, buscarla
+                      if (!alreadyContainsVehicle) {
+                        // Intentar extraer la patente del vehículo de varias formas
+                        // 1. Patrón "al vehículo PATENTE" en cualquier parte del texto
+                        const assignmentMatch = event.descripcion.match(/al vehículo\s+([A-Z0-9-]+)/i);
+                        if (assignmentMatch && assignmentMatch[1]) {
+                          vehicleInfo = assignmentMatch[1];
+                        } else {
+                          // 2. Patrón "vehículo PATENTE"
+                          const vehicleMatch = event.descripcion.match(/vehículo\s+([A-Z0-9-]+)/i);
+                          if (vehicleMatch && vehicleMatch[1]) {
+                            vehicleInfo = vehicleMatch[1];
+                          } else {
+                            // 3. Buscar una patente genérica
+                            const patenteMatch = event.descripcion.match(/[A-Z]{2,4}\d{2,3}[A-Z0-9]{0,2}/);
+                            if (patenteMatch) {
+                              vehicleInfo = patenteMatch[0];
+                            }
+                          }
+                        }
+                      }
+                    }
+                    
+                    // Procesar el mensaje para mostrar
+                    let displayMessage = event.descripcion || "";
+                    
+                    // Si es una asignación y el mensaje no tiene la patente al final, agregarla
+                    if (eventType === "assigned" && !alreadyContainsVehicle && vehicleInfo && 
+                        displayMessage.includes("[SEMIRREMOLQUE]") && 
+                        !displayMessage.endsWith(vehicleInfo)) {
+                      // Si ya contiene "al vehículo", reemplazar con la patente correcta
+                      if (displayMessage.includes("al vehículo")) {
+                        displayMessage = displayMessage.replace(
+                          /al vehículo(\s+[A-Z0-9-]*)?/i, 
+                          `al vehículo ${vehicleInfo}`
+                        );
+                      } else {
+                        // Si no tiene "al vehículo", agregarlo al final
+                        displayMessage = `${displayMessage} al vehículo ${vehicleInfo}`;
+                      }
+                    }
+                    
+                    return (
+                      <div key={event.id_evento} className="border-b pb-3 last:border-b-0 last:pb-0">
+                        <div className="flex justify-between">
+                          <div className="flex items-start gap-2">
+                            {eventType === "assigned" ? (
+                              <LinkIcon className="h-4 w-4 mt-1 text-green-500" />
+                            ) : eventType === "unassigned" ? (
+                              <Unlink className="h-4 w-4 mt-1 text-orange-500" />
+                            ) : (
+                              <Truck className="h-4 w-4 mt-1 text-blue-500" />
+                            )}
+                            <div>
+                              <p className="text-sm">{displayMessage}</p>
+                              {vehicleInfo && !displayMessage.endsWith(vehicleInfo) && (
+                                <div className="flex items-center gap-2 mt-1.5">
+                                  <Badge 
+                                    variant="outline" 
+                                    className={
+                                      eventType === "assigned" 
+                                        ? "bg-green-50 text-green-700 border-green-200" 
+                                        : eventType === "unassigned"
+                                          ? "bg-orange-50 text-orange-700 border-orange-200"
+                                          : "bg-blue-50 text-blue-700 border-blue-200"
+                                    }
+                                  >
+                                    {eventAction ? `${eventAction} vehículo ${vehicleInfo}` : `Vehículo: ${vehicleInfo}`}
+                                  </Badge>
+                                </div>
+                              )}
+                              <p className="text-xs text-muted-foreground mt-1.5">
+                                {new Date(event.fecha_inicio).toLocaleDateString('es-ES', {
+                                  day: '2-digit',
+                                  month: 'short',
+                                  year: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit'
+                                })}
+                              </p>
+                            </div>
                           </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               ) : (
                 <p className="text-muted-foreground">No hay datos de asignaciones previas</p>

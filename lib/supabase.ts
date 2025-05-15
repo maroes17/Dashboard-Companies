@@ -1,3 +1,5 @@
+"use client";
+
 import { createClient } from '@supabase/supabase-js';
 
 // Estas URLs deben provenir de variables de entorno en producción
@@ -137,13 +139,14 @@ export type Semirremolque = {
   marca?: string;
   modelo?: string;
   anio?: number;
-  estado?: 'activo' | 'inactivo' | 'mantenimiento' | 'en_reparacion' | 'dado_de_baja';
-  fecha_ingreso?: string; // Formato ISO YYYY-MM-DD
-  fecha_ultima_revision?: string; // Formato ISO YYYY-MM-DD
-  vencimiento_revision_tecnica?: string; // Formato ISO YYYY-MM-DD
+  estado: 'activo' | 'inactivo' | 'mantenimiento' | 'en_reparacion' | 'dado_de_baja';
+  fecha_ingreso?: string;
+  fecha_ultima_revision?: string;
+  vencimiento_revision_tecnica?: string;
   observaciones?: string;
   asignado_a_flota_id?: number;
-  creado_en: string; // Timestamp ISO
+  creado_en: string;
+  actualizado_en?: string;
 };
 
 export type Poliza = {
@@ -164,17 +167,109 @@ export type Poliza = {
 export type Cliente = {
   id_cliente: number;
   razon_social: string;
-  rut?: string;
-  nombre_fantasia?: string;
-  direccion?: string;
-  ciudad?: string;
-  pais?: string;
-  telefono?: string;
-  email?: string;
-  contacto_principal?: string;
-  telefono_contacto?: string;
-  email_contacto?: string;
-  estado?: 'activo' | 'inactivo' | 'suspendido';
-  observaciones?: string;
+  cuit: string;
+  direccion: string;
+  telefono: string;
+  email: string;
+  contacto: string;
+  creado_en: string;
+  actualizado_en: string;
+};
+
+// Tipo para localidades
+export type Localidad = {
+  id_localidad: number;
+  nombre: string;
+  pais: string;
+  latitud?: number;
+  longitud?: number;
+  es_puerto: boolean;
+  es_aduana: boolean;
+  es_deposito_contenedores: boolean;
   creado_en: string; // Timestamp ISO
+};
+
+// Tipo para viajes
+export type Viaje = {
+  id_viaje: number;
+  id_cliente?: number;
+  id_chofer?: number;
+  id_flota?: number;
+  id_semirremolque?: number;
+  id_origen: number;
+  id_destino: number;
+  tipo_viaje: string;
+  estado: 'pendiente' | 'en_ruta' | 'completado' | 'incidente' | 'cancelado';
+  prioridad: 'baja' | 'media' | 'alta' | 'urgente';
+  fecha_salida_programada: string;
+  fecha_llegada_programada: string;
+  fecha_salida_real?: string;
+  fecha_llegada_real?: string;
+  contenedor?: string;
+  nro_guia?: string;
+  nro_control?: number;
+  factura?: string;
+  empresa?: string;
+  notas?: string;
+  observaciones?: string;
+  creado_en: string;
+  actualizado_en: string;
+};
+
+// Tipo para etapas de viaje
+export type EtapaViaje = {
+  id_etapa: number;
+  id_viaje: number;
+  tipo_etapa: 'carga' | 'transporte' | 'aduana' | 'descarga' | 'entrega_vacio' | 'retiro_vacio';
+  id_localidad: number;
+  estado: 'pendiente' | 'en_proceso' | 'completada' | 'cancelada';
+  fecha_programada: string; // Timestamp ISO
+  fecha_realizada?: string; // Timestamp ISO
+  observaciones?: string;
+  documentos_adjuntos?: any;
+  creado_en: string; // Timestamp ISO
+  actualizado_en: string; // Timestamp ISO
+};
+
+// Tipo para incidentes de viaje
+export type IncidenteViaje = {
+  id_incidente: number;
+  id_viaje: number;
+  tipo_incidente: string;
+  descripcion: string;
+  fecha_inicio: string;
+  fecha_resolucion?: string;
+  estado: 'reportado' | 'en_proceso' | 'resuelto';
+  acciones_tomadas?: string;
+  resuelto_por?: string;
+  url_foto?: string;
+  creado_en: string;
+  actualizado_en: string;
+};
+
+// Tipo para documentos de viaje
+export type DocumentoViaje = {
+  id_documento: number;
+  id_viaje: number;
+  tipo_documento: string;
+  nombre_archivo: string;
+  url_archivo: string;
+  fecha_emision?: string; // Timestamp ISO
+  fecha_vencimiento?: string; // Timestamp ISO
+  observaciones?: string;
+  creado_por?: number;
+  creado_en: string; // Timestamp ISO
+};
+
+export type Chofer = {
+  id_chofer: number;
+  nombre: string;
+  apellido: string;
+  dni: string;
+  licencia: string;
+  telefono: string;
+  email: string;
+  estado: 'activo' | 'inactivo';
+  creado_en: string;
+  actualizado_en: string;
 }; 
