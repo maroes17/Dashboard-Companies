@@ -42,7 +42,7 @@ export function NewIncidenteDialog({
     id_viaje: viajeId,
     tipo_incidente: "mecanico",
     descripcion: "",
-    estado: "reportado",
+    estado: "pendiente",
     fecha_inicio: new Date().toISOString(),
   });
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
@@ -57,7 +57,7 @@ export function NewIncidenteDialog({
         id_viaje: viajeId,
         tipo_incidente: "mecanico",
         descripcion: "",
-        estado: "reportado",
+        estado: "pendiente",
         fecha_inicio: new Date().toISOString(),
       });
       setValidationErrors({});
@@ -197,7 +197,19 @@ export function NewIncidenteDialog({
     try {
       setIsLoading(true);
       
-      console.log('Creando incidente con datos:', formData);
+      console.log('🔄 Creando incidente con datos:', formData);
+      
+      // Verificar si ya existe un incidente para este viaje
+      const { data: existingIncidentes, error: checkError } = await supabase
+        .from('incidentes_viaje')
+        .select('id_incidente')
+        .eq('id_viaje', viajeId);
+      
+      if (checkError) {
+        console.error('❌ Error al verificar incidentes existentes:', checkError);
+      } else {
+        console.log('📊 Incidentes existentes para el viaje:', existingIncidentes?.length || 0);
+      }
       
       // Insertar el incidente en la base de datos
       const { data: incidenteData, error: incidenteError } = await supabase
@@ -207,11 +219,12 @@ export function NewIncidenteDialog({
         .single();
       
       if (incidenteError) {
-        console.error('Error al crear incidente:', incidenteError);
+        console.error('❌ Error al crear incidente:', incidenteError);
         throw incidenteError;
       }
       
-      console.log('Incidente creado:', incidenteData);
+      console.log('✅ Incidente creado:', incidenteData);
+      console.log('🔍 Consulta SQL:', `INSERT INTO incidentes_viaje (id_viaje, tipo_incidente, descripcion, estado, fecha_inicio) VALUES (${viajeId}, '${formData.tipo_incidente}', '${formData.descripcion}', '${formData.estado}', '${formData.fecha_inicio}')`);
       
       if (incidenteData) {
         // Si hay una foto, subirla
@@ -226,7 +239,7 @@ export function NewIncidenteDialog({
               .eq('id_incidente', incidenteData.id_incidente);
               
             if (updateError) {
-              console.error('Error al actualizar URL de foto:', updateError);
+              console.error('❌ Error al actualizar URL de foto:', updateError);
             }
           }
         }
@@ -238,7 +251,7 @@ export function NewIncidenteDialog({
           .eq('id_viaje', viajeId);
           
         if (viajeError) {
-          console.error('Error al actualizar estado del viaje:', viajeError);
+          console.error('❌ Error al actualizar estado del viaje:', viajeError);
         }
         
         toast({
@@ -249,10 +262,13 @@ export function NewIncidenteDialog({
         // Cerrar el diálogo y limpiar el formulario
         handleReset();
         onOpenChange(false);
+        
+        // Asegurarnos de que se llame a onIncidenteCreated
+        console.log('🔄 Notificando creación de incidente');
         await onIncidenteCreated();
       }
     } catch (error: any) {
-      console.error("Error al registrar incidente:", error);
+      console.error("❌ Error al registrar incidente:", error);
       toast({
         title: "Error al registrar",
         description: error.message || "Ocurrió un error al registrar el incidente.",
@@ -268,7 +284,7 @@ export function NewIncidenteDialog({
       id_viaje: viajeId,
       tipo_incidente: "mecanico",
       descripcion: "",
-      estado: "reportado",
+      estado: "pendiente",
       fecha_inicio: new Date().toISOString(),
     });
     setValidationErrors({});

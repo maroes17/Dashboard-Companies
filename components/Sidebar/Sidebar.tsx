@@ -14,7 +14,8 @@ import {
   FileCheck,
   Building2,
   AlertTriangle,
-  Wrench
+  Wrench,
+  ListChecks
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
@@ -63,6 +64,7 @@ const DEFAULT_SECTIONS: SidebarSectionType[] = [
     title: "Configuración",
     items: [
       { icon: Settings, label: "Ajustes", href: "/settings" },
+      { icon: ListChecks, label: "Etapas de Viaje", href: "/settings/etapas-viaje" },
       { icon: HelpCircle, label: "Ayuda", href: "/help" }
     ]
   }

@@ -68,13 +68,24 @@ export function ClientDetailsDialog({
             </Badge>
           </div>
 
-          {/* RUT */}
-          {client.rut && (
-            <div className="flex justify-between items-center">
-              <span className="text-sm font-medium">RUT:</span>
-              <span className="text-sm">{client.rut}</span>
-            </div>
-          )}
+          {/* Información de identificación fiscal */}
+          <div className="flex items-center gap-2 mt-2">
+            <FileText className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm text-muted-foreground font-semibold">
+              {(() => {
+                if (!client) return null;
+                if (client.pais?.toLowerCase() === 'chile') {
+                  return `RUT: ${client.rut || 'No disponible'}`;
+                } else if (client.pais?.toLowerCase() === 'argentina') {
+                  return `CUIT: ${client.cuit || 'No disponible'}`;
+                }
+                // Si no se puede determinar el país, mostrar ambos si están disponibles
+                if (client.rut) return `RUT: ${client.rut}`;
+                if (client.cuit) return `CUIT: ${client.cuit}`;
+                return 'No disponible';
+              })()}
+            </span>
+          </div>
 
           {/* Información de contacto */}
           <div className="border rounded-md p-4 space-y-3">

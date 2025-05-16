@@ -32,12 +32,12 @@ export const ViajeTable = ({
   // Función para obtener la clase de estado
   const getEstadoClassName = (estado: string) => {
     switch (estado) {
-      case 'planificado': return 'bg-blue-500';
-      case 'en_ruta': return 'bg-green-500';
-      case 'incidente': return 'bg-amber-500';
-      case 'realizado': return 'bg-green-700';
-      case 'cancelado': return 'bg-red-500';
-      default: return 'bg-gray-500';
+      case 'planificado': return 'bg-gray-300 text-gray-800';
+      case 'en_ruta': return 'bg-sky-400 text-white';
+      case 'incidente': return 'bg-yellow-400 text-gray-800';
+      case 'realizado': return 'bg-green-500 text-white';
+      case 'cancelado': return 'bg-red-500 text-white';
+      default: return 'bg-gray-300 text-gray-800';
     }
   };
 

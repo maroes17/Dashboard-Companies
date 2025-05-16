@@ -83,78 +83,76 @@ export default function TripsPage() {
     try {
       setIsLoading(true);
 
-      // Cargar viajes
-      const { data: viajesData, error: viajesError } = await supabase
-        .from('viajes')
-        .select('*')
-        .order('fecha_salida_programada', { ascending: false });
+      // Cargar todos los datos en paralelo
+      const [
+        { data: viajesData, error: viajesError },
+        { data: localidadesData, error: localidadesError },
+        { data: clientesData, error: clientesError },
+        { data: conductoresData, error: conductoresError },
+        { data: vehiculosData, error: vehiculosError },
+        { data: semirremolquesData, error: semirremolquesError }
+      ] = await Promise.all([
+        supabase
+          .from('viajes')
+          .select('*')
+          .order('fecha_salida_programada', { ascending: false }),
+        supabase
+          .from('localidades')
+          .select('*'),
+        supabase
+          .from('clientes')
+          .select('*')
+          .eq('estado', 'activo'),
+        supabase
+          .from('choferes')
+          .select('*')
+          .eq('estado', 'activo'),
+        supabase
+          .from('flota')
+          .select('*')
+          .eq('estado', 'activo'),
+        supabase
+          .from('semirremolques')
+          .select('*')
+          .eq('estado', 'activo')
+      ]);
 
+      // Manejar errores
       if (viajesError) throw viajesError;
-      setViajes(viajesData || []);
-
-      // Cargar localidades
-      const { data: localidadesData, error: localidadesError } = await supabase
-        .from('localidades')
-        .select('*');
-
       if (localidadesError) throw localidadesError;
-      const localidadesMap = (localidadesData || []).reduce((acc, localidad) => {
+      if (clientesError) throw clientesError;
+      if (conductoresError) throw conductoresError;
+      if (vehiculosError) throw vehiculosError;
+      if (semirremolquesError) throw semirremolquesError;
+
+      // Actualizar estados
+      setViajes(viajesData || []);
+      
+      // Crear mapas de datos de manera más eficiente
+      setLocalidades((localidadesData || []).reduce((acc, localidad) => {
         acc[localidad.id_localidad] = localidad;
         return acc;
-      }, {} as Record<number, Localidad>);
-      setLocalidades(localidadesMap);
+      }, {} as Record<number, Localidad>));
 
-      // Cargar clientes
-      const { data: clientesData, error: clientesError } = await supabase
-        .from('clientes')
-        .select('*')
-        .eq('estado', 'activo');
-
-      if (clientesError) throw clientesError;
-      const clientesMap = (clientesData || []).reduce((acc, cliente) => {
+      setClientes((clientesData || []).reduce((acc, cliente) => {
         acc[cliente.id_cliente] = cliente;
         return acc;
-      }, {} as Record<number, Cliente>);
-      setClientes(clientesMap);
+      }, {} as Record<number, Cliente>));
 
-      // Cargar conductores
-      const { data: conductoresData, error: conductoresError } = await supabase
-        .from('choferes')
-        .select('*')
-        .eq('estado', 'activo');
-
-      if (conductoresError) throw conductoresError;
-      const conductoresMap = (conductoresData || []).reduce((acc, conductor) => {
+      setConductores((conductoresData || []).reduce((acc, conductor) => {
         acc[conductor.id_chofer] = conductor;
         return acc;
-      }, {} as Record<number, Driver>);
-      setConductores(conductoresMap);
+      }, {} as Record<number, Driver>));
 
-      // Cargar vehículos
-      const { data: vehiculosData, error: vehiculosError } = await supabase
-        .from('flota')
-        .select('*')
-        .eq('estado', 'activo');
-
-      if (vehiculosError) throw vehiculosError;
-      const vehiculosMap = (vehiculosData || []).reduce((acc, vehiculo) => {
+      setVehiculos((vehiculosData || []).reduce((acc, vehiculo) => {
         acc[vehiculo.id_flota] = vehiculo;
         return acc;
-      }, {} as Record<number, Fleet>);
-      setVehiculos(vehiculosMap);
+      }, {} as Record<number, Fleet>));
 
-      // Cargar semirremolques
-      const { data: semirremolquesData, error: semirremolquesError } = await supabase
-        .from('semirremolques')
-        .select('*')
-        .eq('estado', 'activo');
-
-      if (semirremolquesError) throw semirremolquesError;
-      const semirremolquesMap = (semirremolquesData || []).reduce((acc, semirremolque) => {
+      setSemirremolques((semirremolquesData || []).reduce((acc, semirremolque) => {
         acc[semirremolque.id_semirremolque] = semirremolque;
         return acc;
-      }, {} as Record<number, Semirremolque>);
-      setSemirremolques(semirremolquesMap);
+      }, {} as Record<number, Semirremolque>));
 
     } catch (error) {
       console.error("Error al cargar datos:", error);
@@ -260,32 +258,35 @@ export default function TripsPage() {
     try {
       setIsDeleteLoading(true);
 
-      const { error } = await supabase
+      // Primero eliminar las etapas del viaje
+      const { error: etapasError } = await supabase
+        .from('etapas_viaje')
+        .delete()
+        .eq('id_viaje', deleteViaje.id_viaje);
+
+      if (etapasError) throw etapasError;
+
+      // Luego eliminar el viaje
+      const { error: viajeError } = await supabase
         .from('viajes')
         .delete()
         .eq('id_viaje', deleteViaje.id_viaje);
 
-      if (error) {
-        throw error;
-      }
-
-      // Actualizar la lista localmente
-      setViajes(prev => prev.filter(v => v.id_viaje !== deleteViaje.id_viaje));
+      if (viajeError) throw viajeError;
 
       toast({
         title: "Viaje eliminado",
-        description: `El viaje #${deleteViaje.nro_control || deleteViaje.id_viaje} ha sido eliminado permanentemente.`,
+        description: "El viaje ha sido eliminado correctamente.",
       });
 
-      // Cerrar el diálogo
       setIsDeleteDialogOpen(false);
       setDeleteViaje(null);
-
-    } catch (error: any) {
-      console.error("Error al eliminar viaje:", error);
+      await fetchData();
+    } catch (error) {
+      console.error('Error al eliminar viaje:', error);
       toast({
-        title: "Error al eliminar",
-        description: error.message || "Ocurrió un error al eliminar el viaje.",
+        title: "Error",
+        description: "No se pudo eliminar el viaje.",
         variant: "destructive",
       });
     } finally {
@@ -391,12 +392,12 @@ export default function TripsPage() {
 
   const getEstadoClassName = (estado: string) => {
     switch (estado) {
-      case 'planificado': return 'bg-blue-500';
-      case 'en_ruta': return 'bg-green-500';
-      case 'incidente': return 'bg-amber-500';
-      case 'realizado': return 'bg-green-700';
-      case 'cancelado': return 'bg-red-500';
-      default: return 'bg-gray-500';
+      case 'planificado': return 'bg-gray-300 text-gray-800';
+      case 'en_ruta': return 'bg-sky-400 text-white';
+      case 'incidente': return 'bg-yellow-400 text-gray-800';
+      case 'realizado': return 'bg-green-500 text-white';
+      case 'cancelado': return 'bg-red-500 text-white';
+      default: return 'bg-gray-300 text-gray-800';
     }
   };
 
@@ -779,7 +780,7 @@ export default function TripsPage() {
       <NewViajeDialog
         open={isNewViajeDialogOpen}
         onOpenChange={setIsNewViajeDialogOpen}
-        onSave={addViaje}
+        onViajeCreated={fetchData}
       />
       
       <EditViajeDialog
@@ -789,18 +790,23 @@ export default function TripsPage() {
         onSave={updateViaje}
       />
       
-      <ViajeDetailsDialog
-        open={isDetailsDialogOpen}
-        onOpenChange={setIsDetailsDialogOpen}
-        viaje={selectedViaje}
-        localidades={localidades}
-        clientes={clientes}
-        conductores={conductores}
-        vehiculos={vehiculos}
-        semirremolques={semirremolques}
-        onRegisterIncidente={handleRegisterIncidente}
-        onResolveIncidente={handleResolveIncidente}
-      />
+      {selectedViaje && (
+        <ViajeDetailsDialog
+          open={isDetailsDialogOpen}
+          onOpenChange={setIsDetailsDialogOpen}
+          viaje={selectedViaje}
+          localidades={localidades}
+          clientes={clientes}
+          conductores={conductores}
+          vehiculos={vehiculos}
+          semirremolques={semirremolques}
+          onRegisterIncidente={handleRegisterIncidente}
+          onResolveIncidente={handleResolveIncidente}
+          onEtapasUpdated={async () => {
+            await fetchData();
+          }}
+        />
+      )}
       
       <ViajeFilterDialog
         open={isFilterDialogOpen}

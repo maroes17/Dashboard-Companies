@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Viaje, Localidad, Cliente, Driver, Fleet, Semirremolque, supabase } from "@/lib/supabase";
+import { Viaje, Localidad, Cliente, Driver, Fleet, Semirremolque, supabase, ETAPAS_VIAJE_IDA, ETAPAS_VIAJE_VUELTA, TipoEtapa } from "@/lib/supabase";
 import {
   Dialog,
   DialogContent,
@@ -29,25 +29,45 @@ import { DatePickerInput } from "./ui/DatePickerInput";
 import { Loader2 } from "lucide-react";
 import { mockLocalidades } from "../utils/mock-data";
 import { PostgrestError } from "@supabase/supabase-js";
-import { toast } from "@/components/ui/use-toast";
+import { useToast } from "@/components/ui/use-toast";
+import { crearEtapasAutomaticamente } from "./ViajeForm";
+import { Badge } from "@/components/ui/badge";
+import { format } from "date-fns";
+import { es } from "date-fns/locale";
 
 interface NewViajeDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSave: (viaje: Omit<Viaje, "id_viaje" | "creado_en" | "actualizado_en">) => Promise<void>;
+  onViajeCreated: () => void;
+}
+
+interface DocumentoViaje {
+  id_documento: number;
+  id_viaje: number;
+  tipo_documento: 'guia' | 'factura' | 'control';
+  numero_documento: string;
+  url_documento: string | null;
+  creado_en: string;
+  actualizado_en: string;
 }
 
 export function NewViajeDialog({
   open,
   onOpenChange,
-  onSave,
+  onViajeCreated
 }: NewViajeDialogProps) {
+  const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [localidades, setLocalidades] = useState<Localidad[]>([]);
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [conductores, setConductores] = useState<Driver[]>([]);
   const [vehiculos, setVehiculos] = useState<Fleet[]>([]);
   const [semirremolques, setSemirremolques] = useState<Semirremolque[]>([]);
+  const [documentos, setDocumentos] = useState<DocumentoViaje[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [tipoDocumento, setTipoDocumento] = useState<'guia' | 'factura' | 'control'>('guia');
+  const [numeroDocumento, setNumeroDocumento] = useState("");
   
   const [formData, setFormData] = useState<Omit<Viaje, "id_viaje" | "creado_en" | "actualizado_en">>({
     tipo_viaje: "ida",
@@ -55,7 +75,7 @@ export function NewViajeDialog({
     fecha_llegada_programada: addHours(new Date(), 48).toISOString(),
     id_origen: 0,
     id_destino: 0,
-    estado: "pendiente",
+    estado: "planificado",
     prioridad: "media",
   });
 
@@ -70,10 +90,140 @@ export function NewViajeDialog({
     }
   }, [open]);
 
+  const insertarLocalidadesBasicas = async () => {
+    try {
+      // Verificar si ya existen localidades
+      const { data: localidadesExistentes, error: errorVerificar } = await supabase
+        .from('localidades')
+        .select('id_localidad')
+        .limit(1);
+
+      if (errorVerificar) throw errorVerificar;
+
+      // Si ya existen localidades, no hacer nada
+      if (localidadesExistentes && localidadesExistentes.length > 0) {
+        return;
+      }
+
+      // Insertar localidades básicas
+      const localidadesBasicas = [
+        // Puertos
+        {
+          nombre: 'Puerto Central',
+          tipo: 'puerto',
+          ciudad: 'San Antonio',
+          pais: 'Chile'
+        },
+        {
+          nombre: 'Puerto STI',
+          tipo: 'puerto',
+          ciudad: 'San Antonio',
+          pais: 'Chile'
+        },
+        {
+          nombre: 'Puerto Valparaíso',
+          tipo: 'puerto',
+          ciudad: 'Valparaíso',
+          pais: 'Chile'
+        },
+        // Aduanas
+        {
+          nombre: 'Paso Fronterizo Los Libertadores',
+          tipo: 'aduana',
+          ciudad: 'Los Andes',
+          pais: 'Chile'
+        },
+        {
+          nombre: 'Uspallata',
+          tipo: 'aduana',
+          ciudad: 'Uspallata',
+          pais: 'Argentina'
+        },
+        {
+          nombre: 'Pino Hachado',
+          tipo: 'aduana',
+          ciudad: 'Victoria',
+          pais: 'Argentina'
+        },
+        // Clientes
+        {
+          nombre: 'Mar del Plata',
+          tipo: 'cliente',
+          ciudad: 'Mar del Plata',
+          pais: 'Argentina'
+        },
+        {
+          nombre: 'Santa Fe',
+          tipo: 'cliente',
+          ciudad: 'Santa Fe',
+          pais: 'Argentina'
+        },
+        {
+          nombre: 'Córdoba',
+          tipo: 'cliente',
+          ciudad: 'Córdoba',
+          pais: 'Argentina'
+        },
+        {
+          nombre: 'Buenos Aires',
+          tipo: 'cliente',
+          ciudad: 'Buenos Aires',
+          pais: 'Argentina'
+        },
+        {
+          nombre: 'Rosario',
+          tipo: 'cliente',
+          ciudad: 'Rosario',
+          pais: 'Argentina'
+        },
+        // Depósitos
+        {
+          nombre: 'Capitán Cortés',
+          tipo: 'deposito',
+          ciudad: 'Buenos Aires',
+          pais: 'Argentina'
+        },
+        {
+          nombre: 'Hiperbaires',
+          tipo: 'deposito',
+          ciudad: 'Buenos Aires',
+          pais: 'Argentina'
+        },
+        {
+          nombre: 'Mar Pacífico',
+          tipo: 'deposito',
+          ciudad: 'Mendoza',
+          pais: 'Argentina'
+        }
+      ];
+
+      const { error: errorInsertar } = await supabase
+        .from('localidades')
+        .insert(localidadesBasicas);
+
+      if (errorInsertar) throw errorInsertar;
+
+      toast({
+        title: "Éxito",
+        description: "Se han creado las localidades básicas",
+      });
+    } catch (error) {
+      console.error('Error al insertar localidades básicas:', error);
+      toast({
+        title: "Error",
+        description: "Error al crear las localidades básicas",
+        variant: "destructive",
+      });
+    }
+  };
+
   const fetchInitialData = async () => {
     setIsLoading(true);
 
     try {
+      // Intentar insertar localidades básicas si no existen
+      await insertarLocalidadesBasicas();
+
       // Cargar localidades
       const { data: localidadesData, error: localidadesError } = await supabase
         .from('localidades')
@@ -82,54 +232,42 @@ export function NewViajeDialog({
       
       if (localidadesError) {
         console.error("Error al cargar localidades:", localidadesError);
-        // Usar datos de muestra si hay un error
-        setLocalidades(mockLocalidades);
-        
-        // Establecer valores predeterminados con datos de muestra
-        if (!formData.id_origen || formData.id_origen === 0) {
-          setFormData(prev => ({ 
-            ...prev, 
-            id_origen: mockLocalidades[0].id_localidad 
-          }));
-        }
-        
-        if (!formData.id_destino || formData.id_destino === 0) {
-          setFormData(prev => ({ 
-            ...prev, 
-            id_destino: mockLocalidades.length > 1 ? mockLocalidades[1].id_localidad : mockLocalidades[0].id_localidad
-          }));
-        }
-      } else if (localidadesData && localidadesData.length > 0) {
-        setLocalidades(localidadesData);
-        
-        // Establecer valores predeterminados
-        if (!formData.id_origen || formData.id_origen === 0) {
-          setFormData(prev => ({ 
-            ...prev, 
-            id_origen: localidadesData[0].id_localidad 
-          }));
-        }
-        
-        if (!formData.id_destino || formData.id_destino === 0) {
-          // Seleccionar un destino diferente al origen si es posible
-          const destinoDefault = localidadesData.length > 1 ? 
-            localidadesData[1].id_localidad : 
-            localidadesData[0].id_localidad;
-            
-          setFormData(prev => ({ 
-            ...prev, 
-            id_destino: destinoDefault
-          }));
-        }
-      } else {
-        // Si no hay datos, usar datos de muestra
-        setLocalidades(mockLocalidades);
-        
-        // Establecer valores predeterminados con datos de muestra
+        toast({
+          title: "Error",
+          description: "No se pudieron cargar las localidades",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (!localidadesData || localidadesData.length === 0) {
+        toast({
+          title: "Error",
+          description: "No hay localidades disponibles en la base de datos",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setLocalidades(localidadesData);
+      
+      // Establecer valores predeterminados
+      if (!formData.id_origen || formData.id_origen === 0) {
         setFormData(prev => ({ 
           ...prev, 
-          id_origen: mockLocalidades[0].id_localidad,
-          id_destino: mockLocalidades.length > 1 ? mockLocalidades[1].id_localidad : mockLocalidades[0].id_localidad
+          id_origen: localidadesData[0].id_localidad 
+        }));
+      }
+      
+      if (!formData.id_destino || formData.id_destino === 0) {
+        // Seleccionar un destino diferente al origen si es posible
+        const destinoDefault = localidadesData.length > 1 ? 
+          localidadesData[1].id_localidad : 
+          localidadesData[0].id_localidad;
+          
+        setFormData(prev => ({ 
+          ...prev, 
+          id_destino: destinoDefault
         }));
       }
 
@@ -156,7 +294,22 @@ export function NewViajeDialog({
       if (conductoresError) {
         console.error("Error al cargar conductores:", conductoresError);
       } else if (conductoresData) {
-        setConductores(conductoresData);
+        // Obtener los choferes que están en viajes en_ruta
+        const { data: viajesEnRuta, error: viajesError } = await supabase
+          .from('viajes')
+          .select('id_chofer')
+          .eq('estado', 'en_ruta');
+
+        if (viajesError) {
+          console.error("Error al cargar viajes en ruta:", viajesError);
+        } else {
+          // Crear un conjunto con los IDs de choferes ocupados
+          const choferesOcupados = new Set(viajesEnRuta?.map(v => v.id_chofer));
+          
+          // Filtrar los choferes para excluir los que están en viajes en_ruta
+          const choferesDisponibles = conductoresData.filter(chofer => !choferesOcupados.has(chofer.id_chofer));
+          setConductores(choferesDisponibles);
+        }
       }
 
       // Cargar vehículos
@@ -186,15 +339,11 @@ export function NewViajeDialog({
       }
     } catch (error) {
       console.error("Error al cargar datos iniciales:", error);
-      // Asegurar que siempre haya localidades disponibles usando datos de muestra
-      setLocalidades(mockLocalidades);
-      
-      // Establecer valores predeterminados con datos de muestra
-      setFormData(prev => ({ 
-        ...prev, 
-        id_origen: mockLocalidades[0].id_localidad,
-        id_destino: mockLocalidades.length > 1 ? mockLocalidades[1].id_localidad : mockLocalidades[0].id_localidad
-      }));
+      toast({
+        title: "Error",
+        description: "Error al cargar los datos iniciales",
+        variant: "destructive",
+      });
     } finally {
       setIsLoading(false);
     }
@@ -306,9 +455,9 @@ export function NewViajeDialog({
       try {
         setIsLoading(true);
         
-        // Si hay un conductor (valor diferente de 0), establecer estado "en_ruta", de lo contrario "pendiente"
-        const nuevoEstado = typeof processedValue === 'number' && processedValue > 0 ? "en_ruta" : "pendiente";
-        setFormData(prev => ({ ...prev, estado: nuevoEstado }));
+        // Si hay un conductor (valor diferente de 0), establecer estado "en_ruta", de lo contrario "planificado"
+        const nuevoEstado = typeof processedValue === 'number' && processedValue > 0 ? "en_ruta" : "planificado";
+        setFormData(prev => ({ ...prev, estado: nuevoEstado as "incidente" | "cancelado" | "planificado" | "en_ruta" | "realizado" }));
         console.log(`🔄 Estado actualizado automáticamente a: ${nuevoEstado}`);
         
         if (typeof processedValue === 'number' && processedValue > 0) {
@@ -369,12 +518,18 @@ export function NewViajeDialog({
   const handleSalidaDateChange = (date: Date | null) => {
     if (!date) return;
     
-    setSalidaDate(date);
-    setFormData(prev => ({ ...prev, fecha_salida_programada: date.toISOString() }));
+    // Preservar la hora actual al establecer la nueva fecha
+    const newDate = new Date(date);
+    newDate.setHours(new Date().getHours());
+    newDate.setMinutes(new Date().getMinutes());
+    
+    setSalidaDate(newDate);
+    setFormData(prev => ({ ...prev, fecha_salida_programada: newDate.toISOString() }));
     
     // Si la fecha de llegada es anterior a la nueva fecha de salida, actualizarla
-    if (llegadaDate < date) {
-      const newLlegadaDate = addHours(date, 48);
+    if (llegadaDate < newDate) {
+      const newLlegadaDate = new Date(newDate);
+      newLlegadaDate.setDate(newLlegadaDate.getDate() + 1);
       setLlegadaDate(newLlegadaDate);
       setFormData(prev => ({ ...prev, fecha_llegada_programada: newLlegadaDate.toISOString() }));
     }
@@ -392,8 +547,13 @@ export function NewViajeDialog({
   const handleLlegadaDateChange = (date: Date | null) => {
     if (!date) return;
     
-    setLlegadaDate(date);
-    setFormData(prev => ({ ...prev, fecha_llegada_programada: date.toISOString() }));
+    // Preservar la hora actual al establecer la nueva fecha
+    const newDate = new Date(date);
+    newDate.setHours(new Date().getHours());
+    newDate.setMinutes(new Date().getMinutes());
+    
+    setLlegadaDate(newDate);
+    setFormData(prev => ({ ...prev, fecha_llegada_programada: newDate.toISOString() }));
     
     // Limpiar errores al editar
     if (validationErrors.fecha_llegada_programada) {
@@ -426,37 +586,159 @@ export function NewViajeDialog({
     return Object.keys(errors).length === 0;
   };
 
+  const crearEtapasIniciales = async (idViaje: number) => {
+    try {
+      const etapasBase = formData.tipo_viaje === 'ida' ? ETAPAS_VIAJE_IDA : ETAPAS_VIAJE_VUELTA;
+      const nuevasEtapas = etapasBase.map((etapa: TipoEtapa) => {
+        // Determinar la localidad según el tipo de etapa
+        let idLocalidad: number;
+        
+        switch (etapa.tipo_localidad) {
+          case 'puerto':
+            idLocalidad = formData.tipo_viaje === 'ida' ? formData.id_origen : formData.id_destino;
+            break;
+          case 'aduana':
+            idLocalidad = formData.tipo_viaje === 'ida' ? formData.id_origen : formData.id_destino;
+            break;
+          case 'cliente':
+            idLocalidad = formData.tipo_viaje === 'ida' ? formData.id_destino : formData.id_origen;
+            break;
+          case 'deposito':
+            idLocalidad = formData.tipo_viaje === 'ida' ? formData.id_destino : formData.id_origen;
+            break;
+          default:
+            // Si no requiere localidad, usar la localidad de destino
+            idLocalidad = formData.id_destino;
+        }
+
+        return {
+          id_viaje: idViaje,
+          id_localidad: idLocalidad,
+          tipo_etapa: etapa.id,
+          estado: 'pendiente',
+          fecha_programada: new Date().toISOString(),
+          observaciones: '',
+          creado_en: new Date().toISOString(),
+          actualizado_en: new Date().toISOString()
+        };
+      });
+
+      const { error } = await supabase
+        .from('etapas_viaje')
+        .insert(nuevasEtapas);
+
+      if (error) throw error;
+
+      toast({
+        title: "Éxito",
+        description: "Etapas del viaje creadas correctamente.",
+      });
+    } catch (error) {
+      console.error('Error al crear etapas iniciales:', error);
+      toast({
+        title: "Error",
+        description: "No se pudieron crear las etapas iniciales del viaje.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!validateForm()) return;
-    
+    setIsLoading(true);
+
     try {
-      setIsLoading(true);
-      
-      // Preparar los datos del viaje
-      const viajeData: Omit<Viaje, 'id_viaje' | 'creado_en' | 'actualizado_en'> = {
-        ...formData,
-        // Asegurar que el contenedor esté en mayúsculas
-        contenedor: formData.contenedor ? formData.contenedor.toUpperCase() : undefined,
-        // Asegurar que el número de guía esté en mayúsculas
-        nro_guia: formData.nro_guia ? formData.nro_guia.toUpperCase() : undefined,
-        // Convertir las fechas a ISO string
-        fecha_salida_programada: new Date(formData.fecha_salida_programada).toISOString(),
-        fecha_llegada_programada: new Date(formData.fecha_llegada_programada).toISOString(),
-        // Establecer el estado inicial
-        estado: 'pendiente' as const,
-        // Establecer la prioridad por defecto si no se especifica
-        prioridad: formData.prioridad || 'media',
-        // Establecer el tipo de viaje por defecto si no se especifica
-        tipo_viaje: formData.tipo_viaje || 'ida'
-      };
-      
-      await onSave(viajeData);
-      handleReset();
+      // Validar campos requeridos
+      if (!formData.id_origen || !formData.id_destino) {
+        toast({
+          title: "Error",
+          description: "Debes seleccionar origen y destino",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Verificar que las localidades existan
+      const { data: localidadesExistentes, error: errorLocalidades } = await supabase
+        .from('localidades')
+        .select('id_localidad')
+        .in('id_localidad', [formData.id_origen, formData.id_destino]);
+
+      if (errorLocalidades) {
+        throw errorLocalidades;
+      }
+
+      if (!localidadesExistentes || localidadesExistentes.length !== 2) {
+        toast({
+          title: "Error",
+          description: "Las localidades seleccionadas no existen en la base de datos",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Crear el viaje
+      const { data: viaje, error: errorViaje } = await supabase
+        .from('viajes')
+        .insert([{
+          id_cliente: formData.id_cliente,
+          id_chofer: formData.id_chofer,
+          id_flota: formData.id_flota,
+          id_semirremolque: formData.id_semirremolque,
+          id_origen: formData.id_origen,
+          id_destino: formData.id_destino,
+          tipo_viaje: formData.tipo_viaje,
+          estado: "planificado",
+          prioridad: formData.prioridad,
+          fecha_salida_programada: formData.fecha_salida_programada,
+          fecha_llegada_programada: formData.fecha_llegada_programada,
+          contenedor: formData.contenedor,
+          nro_guia: formData.nro_guia,
+          nro_control: formData.nro_control,
+          factura: formData.factura,
+          empresa: formData.empresa,
+          observaciones: formData.observaciones
+        }])
+        .select()
+        .single();
+
+      if (errorViaje) throw errorViaje;
+
+      // Crear las etapas iniciales
+      if (viaje) {
+        await crearEtapasIniciales(viaje.id_viaje);
+      }
+
+      // Guardar los documentos
+      if (documentos.length > 0) {
+        const documentosConViajeId = documentos.map(doc => ({
+          ...doc,
+          id_viaje: viaje.id_viaje
+        }));
+
+        const { error: documentosError } = await supabase
+          .from('documentos_viaje')
+          .insert(documentosConViajeId);
+
+        if (documentosError) throw documentosError;
+      }
+
+      toast({
+        title: "Éxito",
+        description: "Viaje creado correctamente",
+      });
+
       onOpenChange(false);
-    } catch (error) {
-      console.error("Error al guardar viaje:", error);
+      if (typeof onViajeCreated === 'function') {
+        await onViajeCreated();
+      }
+    } catch (error: any) {
+      console.error('Error al guardar viaje:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Error al guardar el viaje",
+        variant: "destructive",
+      });
     } finally {
       setIsLoading(false);
     }
@@ -473,12 +755,122 @@ export function NewViajeDialog({
       fecha_llegada_programada: addHours(new Date(), 48).toISOString(),
       id_origen: resetOrigin,
       id_destino: resetDestination,
-      estado: "pendiente",
+      estado: "planificado",
       prioridad: "media",
     });
     setSalidaDate(new Date());
     setLlegadaDate(addHours(new Date(), 48));
     setValidationErrors({});
+  };
+
+  const getEstadoBadge = (estado: string) => {
+    const estados: Record<string, { label: string; className: string }> = {
+      planificado: {
+        label: "Planificado",
+        className: "bg-gray-300 text-gray-800 hover:bg-gray-400"
+      },
+      en_ruta: {
+        label: "En Ruta",
+        className: "bg-sky-400 text-white hover:bg-sky-500"
+      },
+      realizado: {
+        label: "Realizado",
+        className: "bg-green-500 text-white hover:bg-green-600"
+      },
+      incidente: {
+        label: "Incidente",
+        className: "bg-yellow-400 text-gray-800 hover:bg-yellow-500"
+      },
+      cancelado: {
+        label: "Cancelado",
+        className: "bg-red-500 text-white hover:bg-red-600"
+      }
+    };
+
+    const estadoConfig = estados[estado] || estados.planificado;
+
+    return (
+      <Badge className={estadoConfig.className}>
+        {estadoConfig.label}
+      </Badge>
+    );
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setSelectedFile(e.target.files[0]);
+    }
+  };
+
+  const handleUploadDocument = async () => {
+    if (!numeroDocumento.trim()) {
+      toast({
+        title: "Error",
+        description: "Por favor, ingresa el número del documento",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setIsUploading(true);
+
+      let publicUrl = null;
+
+      // Si hay un archivo seleccionado, subirlo
+      if (selectedFile) {
+        const fileExt = selectedFile.name.split('.').pop();
+        const fileName = `temp/${tipoDocumento}_${Date.now()}.${fileExt}`;
+        const filePath = `documentos/${fileName}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('documentos')
+          .upload(filePath, selectedFile);
+
+        if (uploadError) throw uploadError;
+
+        // Obtener la URL pública del archivo
+        const { data: { publicUrl: url } } = supabase.storage
+          .from('documentos')
+          .getPublicUrl(filePath);
+
+        publicUrl = url;
+      }
+
+      // Crear el documento temporal con un ID más pequeño
+      const nuevoDocumento: DocumentoViaje = {
+        id_documento: Math.floor(Math.random() * 1000000), // ID temporal más pequeño
+        id_viaje: 0, // Se actualizará cuando se cree el viaje
+        tipo_documento: tipoDocumento,
+        numero_documento: numeroDocumento,
+        url_documento: publicUrl,
+        creado_en: new Date().toISOString(),
+        actualizado_en: new Date().toISOString()
+      };
+
+      // Agregar a la lista de documentos
+      setDocumentos(prev => [...prev, nuevoDocumento]);
+
+      toast({
+        title: "Documento registrado",
+        description: "El documento se ha registrado correctamente",
+      });
+
+      // Limpiar el formulario
+      setSelectedFile(null);
+      setNumeroDocumento("");
+      setTipoDocumento('guia');
+
+    } catch (error: any) {
+      console.error("Error al registrar documento:", error);
+      toast({
+        title: "Error",
+        description: error.message || "Error al registrar el documento",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   return (
@@ -623,7 +1015,7 @@ export function NewViajeDialog({
                         key={cliente.id_cliente} 
                         value={cliente.id_cliente.toString()}
                       >
-                        {cliente.razon_social} {cliente.rut && `(${cliente.rut})`}
+                        {cliente.razon_social}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -736,64 +1128,107 @@ export function NewViajeDialog({
                   disabled={isLoading}
                 />
               </div>
-              
-              {/* Observaciones */}
-              <div className="space-y-2">
-                <Label htmlFor="notas">Observaciones</Label>
-                <Textarea
-                  id="notas"
-                  name="notas"
-                  rows={4}
-                  value={formData.notas || ""}
-                  onChange={handleInputChange}
-                  disabled={isLoading}
-                />
-              </div>
             </TabsContent>
             
             {/* Pestaña de Documentos */}
             <TabsContent value="documentos" className="space-y-4 mt-4">
-              {/* Número de Control */}
-              <div className="space-y-2">
-                <Label htmlFor="nro_control">Número de Control</Label>
-                <Input
-                  id="nro_control"
-                  name="nro_control"
-                  type="number"
-                  value={formData.nro_control?.toString() || ""}
-                  onChange={handleInputChange}
-                  disabled={isLoading}
-                />
-              </div>
-              
-              {/* Número de Guía */}
-              <div className="space-y-2">
-                <Label htmlFor="nro_guia">Número de Guía</Label>
-                <Input
-                  id="nro_guia"
-                  name="nro_guia"
-                  value={formData.nro_guia || ""}
-                  onChange={handleInputChange}
-                  disabled={isLoading}
-                />
-              </div>
-              
-              {/* Factura */}
-              <div className="space-y-2">
-                <Label htmlFor="factura">Factura</Label>
-                <Input
-                  id="factura"
-                  name="factura"
-                  value={formData.factura || ""}
-                  onChange={handleInputChange}
-                  disabled={isLoading}
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <p className="text-sm text-muted-foreground">
-                  La funcionalidad de adjuntar documentos estará disponible próximamente.
-                </p>
+              <div className="space-y-4">
+                {/* Formulario de subida */}
+                <div className="border rounded-lg p-4 space-y-4">
+                  <h3 className="text-sm font-medium">Registrar nuevo documento</h3>
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="tipo_documento">Tipo de documento</Label>
+                      <Select
+                        value={tipoDocumento}
+                        onValueChange={(value: 'guia' | 'factura' | 'control') => setTipoDocumento(value)}
+                        disabled={isUploading}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Seleccionar tipo" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="guia">Guía</SelectItem>
+                          <SelectItem value="factura">Factura</SelectItem>
+                          <SelectItem value="control">Control</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <Label htmlFor="numero_documento">Número de documento</Label>
+                      <Input
+                        id="numero_documento"
+                        value={numeroDocumento}
+                        onChange={(e) => setNumeroDocumento(e.target.value)}
+                        placeholder="Ingresa el número del documento"
+                        disabled={isUploading}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="archivo">Archivo (opcional)</Label>
+                    <Input
+                      id="archivo"
+                      type="file"
+                      onChange={handleFileChange}
+                      disabled={isUploading}
+                    />
+                  </div>
+
+                  <Button
+                    onClick={handleUploadDocument}
+                    disabled={!numeroDocumento.trim() || isUploading}
+                    className="w-full"
+                  >
+                    {isUploading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    {isUploading ? "Registrando..." : "Registrar documento"}
+                  </Button>
+                </div>
+
+                {/* Lista de documentos */}
+                <div className="space-y-4">
+                  <h3 className="text-sm font-medium">Documentos registrados</h3>
+                  
+                  {documentos.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      No hay documentos registrados para este viaje.
+                    </p>
+                  ) : (
+                    <div className="grid gap-4">
+                      {documentos.map((doc) => (
+                        <div
+                          key={doc.id_documento}
+                          className="flex items-center justify-between p-4 border rounded-lg"
+                        >
+                          <div className="space-y-1">
+                            <p className="text-sm font-medium capitalize">
+                              {doc.tipo_documento}
+                            </p>
+                            <p className="text-sm text-muted-foreground">
+                              {doc.numero_documento}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              Registrado el {format(new Date(doc.creado_en), "dd/MM/yyyy HH:mm", { locale: es })}
+                            </p>
+                          </div>
+                          
+                          {doc.url_documento && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => doc.url_documento && window.open(doc.url_documento, '_blank')}
+                            >
+                              Ver documento
+                            </Button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             </TabsContent>
           </Tabs>
