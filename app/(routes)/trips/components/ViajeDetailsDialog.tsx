@@ -430,8 +430,8 @@ export function ViajeDetailsDialog({
                   <h3 className="text-sm font-medium flex items-center gap-1">
                     <PackageOpen className="h-4 w-4" /> Contenedor
                   </h3>
-                  <p className="text-sm">
-                    {viaje.contenedor || 'No especificado'}
+                  <p className="text-sm font-mono">
+                    {viaje.contenedor?.toUpperCase() || 'No especificado'}
                   </p>
                 </div>
               </div>

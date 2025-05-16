@@ -41,17 +41,6 @@ export const ViajeTable = ({
     }
   };
 
-  // Función para obtener la clase de prioridad
-  const getPrioridadClassName = (prioridad: string) => {
-    switch (prioridad) {
-      case 'baja': return 'bg-blue-500';
-      case 'media': return 'bg-green-500';
-      case 'alta': return 'bg-amber-500';
-      case 'urgente': return 'bg-red-500';
-      default: return 'bg-gray-500';
-    }
-  };
-
   return (
     <div className="overflow-x-auto rounded-md border">
       <table className="w-full caption-bottom text-sm">
@@ -63,8 +52,8 @@ export const ViajeTable = ({
             <th className="h-12 px-4 text-left align-middle font-medium">Fechas</th>
             <th className="h-12 px-4 text-left align-middle font-medium">Cliente</th>
             <th className="h-12 px-4 text-left align-middle font-medium">Equipo</th>
+            <th className="h-12 px-4 text-left align-middle font-medium">Contenedor</th>
             <th className="h-12 px-4 text-left align-middle font-medium">Estado</th>
-            <th className="h-12 px-4 text-left align-middle font-medium">Prioridad</th>
             <th className="h-12 px-4 text-center align-middle font-medium">Acciones</th>
           </tr>
         </thead>
@@ -130,13 +119,11 @@ export const ViajeTable = ({
                 </div>
               </td>
               <td className="p-4 align-middle">
-                <Badge className={getEstadoClassName(viaje.estado)}>
-                  {viaje.estado.replace('_', ' ')}
-                </Badge>
+                <span className="font-mono">{viaje.contenedor?.toUpperCase() || "No especificado"}</span>
               </td>
               <td className="p-4 align-middle">
-                <Badge className={getPrioridadClassName(viaje.prioridad)}>
-                  {viaje.prioridad}
+                <Badge className={getEstadoClassName(viaje.estado)}>
+                  {viaje.estado.replace('_', ' ')}
                 </Badge>
               </td>
               <td className="p-4 align-middle">
@@ -216,7 +203,7 @@ export const ViajeTable = ({
 
           {viajes.length === 0 && (
             <tr>
-              <td colSpan={8} className="p-8 text-center">
+              <td colSpan={9} className="p-8 text-center">
                 <div className="flex flex-col items-center justify-center py-4">
                   <Package className="h-12 w-12 text-muted-foreground mb-4" />
                   <h3 className="text-lg font-medium">No se encontraron viajes</h3>
