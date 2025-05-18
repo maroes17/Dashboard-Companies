@@ -98,7 +98,8 @@ export default function TripsPage() {
           .order('fecha_salida_programada', { ascending: false }),
         supabase
           .from('localidades')
-          .select('*'),
+          .select('*')
+          .order('nombre'),
         supabase
           .from('clientes')
           .select('*')
@@ -130,7 +131,18 @@ export default function TripsPage() {
       
       // Crear mapas de datos de manera más eficiente
       setLocalidades((localidadesData || []).reduce((acc, localidad) => {
-        acc[localidad.id_localidad] = localidad;
+        acc[localidad.id_localidad] = {
+          id_localidad: localidad.id_localidad,
+          nombre: localidad.nombre,
+          ciudad: localidad.ciudad,
+          pais: localidad.pais,
+          tipo: localidad.tipo,
+          es_puerto: localidad.es_puerto,
+          es_aduana: localidad.es_aduana,
+          es_deposito_contenedores: localidad.es_deposito_contenedores,
+          creado_en: localidad.creado_en,
+          actualizado_en: localidad.actualizado_en
+        };
         return acc;
       }, {} as Record<number, Localidad>));
 

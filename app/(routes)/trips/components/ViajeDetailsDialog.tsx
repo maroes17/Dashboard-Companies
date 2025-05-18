@@ -26,8 +26,7 @@ import {
   Fleet, 
   Semirremolque,
   TipoEtapa,
-  ETAPAS_VIAJE_IDA,
-  ETAPAS_VIAJE_VUELTA
+  getEtapasByTipoViaje
 } from "@/lib/supabase";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -122,8 +121,6 @@ export function ViajeDetailsDialog({
       const [
         { data: etapasData, error: etapasError },
         { data: incidentesData, error: incidentesError },
-        { data: origenData, error: origenError },
-        { data: destinoData, error: destinoError },
         { data: clienteData, error: clienteError },
         { data: conductorData, error: conductorError },
         { data: vehiculoData, error: vehiculoError },
@@ -142,16 +139,6 @@ export function ViajeDetailsDialog({
           .select('*')
           .eq('id_viaje', viaje.id_viaje)
           .order('fecha_inicio', { ascending: false }),
-        viaje.id_origen ? supabase
-          .from('localidades')
-          .select('*')
-          .eq('id_localidad', viaje.id_origen)
-          .single() : Promise.resolve({ data: null, error: null }),
-        viaje.id_destino ? supabase
-          .from('localidades')
-          .select('*')
-          .eq('id_localidad', viaje.id_destino)
-          .single() : Promise.resolve({ data: null, error: null }),
         viaje.id_cliente ? supabase
           .from('clientes')
           .select('*')
@@ -177,8 +164,6 @@ export function ViajeDetailsDialog({
       // Manejar errores
       if (etapasError) throw etapasError;
       if (incidentesError) throw incidentesError;
-      if (origenError) throw origenError;
-      if (destinoError) throw destinoError;
       if (clienteError) throw clienteError;
       if (conductorError) throw conductorError;
       if (vehiculoError) throw vehiculoError;
@@ -187,18 +172,22 @@ export function ViajeDetailsDialog({
       // Actualizar estados
       if (etapasData) {
         setEtapas(etapasData);
+        
+        // Obtener origen y destino de las etapas
+        const primeraEtapa = etapasData[0];
+        const ultimaEtapa = etapasData[etapasData.length - 1];
+        
+        if (primeraEtapa?.localidades) {
+          setOrigen(primeraEtapa.localidades);
+        }
+        
+        if (ultimaEtapa?.localidades) {
+          setDestino(ultimaEtapa.localidades);
+        }
       }
       
       if (incidentesData) {
         setIncidentes(incidentesData);
-      }
-      
-      if (origenData) {
-        setOrigen(origenData);
-      }
-      
-      if (destinoData) {
-        setDestino(destinoData);
       }
       
       if (clienteData) {
@@ -457,7 +446,8 @@ export function ViajeDetailsDialog({
   };
 
   const getEtapaConfig = (tipoEtapa: string): TipoEtapa | undefined => {
-    return [...ETAPAS_VIAJE_IDA, ...ETAPAS_VIAJE_VUELTA].find(e => e.id === tipoEtapa);
+    const etapas = getEtapasByTipoViaje(viaje?.tipo_viaje as 'ida' | 'vuelta');
+    return etapas.find(etapa => etapa.id === tipoEtapa);
   };
 
   const handleEtapaCheck = async (etapa: EtapaViaje, checked: boolean) => {
@@ -885,27 +875,87 @@ export function ViajeDetailsDialog({
                                       <SelectValue placeholder="Seleccionar localidad" />
                                     </SelectTrigger>
                                     <SelectContent>
-                                      {Object.values(localidades)
-                                        .filter(localidad => {
-                                          if (etapaInfo.tipo_localidad === 'puerto') {
-                                            return localidad.tipo === 'puerto';
-                                          } else if (etapaInfo.tipo_localidad === 'aduana') {
-                                            return localidad.tipo === 'aduana';
-                                          } else if (etapaInfo.tipo_localidad === 'deposito') {
-                                            return localidad.tipo === 'deposito';
-                                          } else if (etapaInfo.tipo_localidad === 'cliente') {
-                                            return localidad.tipo === 'cliente';
-                                          }
-                                          return true;
-                                        })
-                                        .map(localidad => (
+                                      {(() => {
+                                        console.log('Localidades disponibles:', Object.values(localidades));
+                                        console.log('Tipo de viaje:', viaje.tipo_viaje);
+                                        console.log('Tipo de etapa:', etapa.tipo_etapa);
+                                        console.log('Configuración de etapa:', etapaInfo);
+
+                                        const localidadesFiltradas = Object.values(localidades)
+                                          .filter(localidad => {
+                                            console.log('Evaluando localidad:', {
+                                              nombre: localidad.nombre,
+                                              es_puerto: localidad.es_puerto,
+                                              es_aduana: localidad.es_aduana,
+                                              es_deposito_contenedores: localidad.es_deposito_contenedores
+                                            });
+
+                                            // Para la etapa de retiro de contenedor en viajes de IDA
+                                            if (etapa.tipo_etapa === 'retiro_contenedor' && viaje.tipo_viaje === 'ida') {
+                                              const esValida = localidad.es_puerto === true;
+                                              console.log('Filtro retiro_contenedor IDA:', { nombre: localidad.nombre, esValida });
+                                              return esValida;
+                                            }
+                                            // Para la etapa de retiro de contenedor en viajes de VUELTA
+                                            if (etapa.tipo_etapa === 'retiro_contenedor' && viaje.tipo_viaje === 'vuelta') {
+                                              const esValida = localidad.es_deposito_contenedores === true;
+                                              console.log('Filtro retiro_contenedor VUELTA:', { nombre: localidad.nombre, esValida });
+                                              return esValida;
+                                            }
+                                            // Para la etapa de despacho a depósito en viajes de IDA
+                                            if (etapa.tipo_etapa === 'despacho_deposito' && viaje.tipo_viaje === 'ida') {
+                                              const esValida = localidad.es_deposito_contenedores === true;
+                                              console.log('Filtro despacho_deposito:', { nombre: localidad.nombre, esValida });
+                                              return esValida;
+                                            }
+                                            // Para otras etapas, usar el tipo de localidad definido en la configuración
+                                            if (etapaInfo?.tipo_localidad) {
+                                              let esValida = false;
+                                              switch (etapaInfo.tipo_localidad) {
+                                                case 'puerto':
+                                                  esValida = localidad.es_puerto === true;
+                                                  break;
+                                                case 'aduana':
+                                                  esValida = localidad.es_aduana === true;
+                                                  break;
+                                                case 'deposito':
+                                                  esValida = localidad.es_deposito_contenedores === true;
+                                                  break;
+                                                case 'cliente':
+                                                  esValida = !localidad.es_puerto && !localidad.es_aduana && !localidad.es_deposito_contenedores;
+                                                  break;
+                                                default:
+                                                  esValida = true;
+                                              }
+                                              console.log('Filtro por tipo_localidad:', { 
+                                                nombre: localidad.nombre, 
+                                                tipo: etapaInfo.tipo_localidad,
+                                                esValida 
+                                              });
+                                              return esValida;
+                                            }
+                                            return true;
+                                          });
+
+                                        console.log('Localidades filtradas:', localidadesFiltradas);
+
+                                        if (localidadesFiltradas.length === 0) {
+                                          console.warn('No se encontraron localidades para el tipo de etapa:', {
+                                            tipo_etapa: etapa.tipo_etapa,
+                                            tipo_viaje: viaje.tipo_viaje,
+                                            tipo_localidad: etapaInfo?.tipo_localidad
+                                          });
+                                        }
+
+                                        return localidadesFiltradas.map(localidad => (
                                           <SelectItem 
                                             key={localidad.id_localidad} 
                                             value={localidad.id_localidad.toString()}
                                           >
                                             {localidad.nombre}, {localidad.pais}
                                           </SelectItem>
-                                        ))}
+                                        ));
+                                      })()}
                                     </SelectContent>
                                   </Select>
                                 </div>

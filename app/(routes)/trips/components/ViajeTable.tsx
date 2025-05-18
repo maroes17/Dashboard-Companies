@@ -70,11 +70,11 @@ export const ViajeTable = ({
                 <div className="flex flex-col gap-1">
                   <div className="flex items-center gap-1">
                     <MapPin className="h-3 w-3 text-blue-500" />
-                    <span>{localidades[viaje.id_origen]?.nombre || "Origen desconocido"}</span>
+                    <span>{localidades[viaje.id_origen] ? `${localidades[viaje.id_origen].nombre}, ${localidades[viaje.id_origen].pais}` : "Origen desconocido"}</span>
                   </div>
                   <div className="flex items-center gap-1">
                     <MapPin className="h-3 w-3 text-red-500" />
-                    <span>{localidades[viaje.id_destino]?.nombre || "Destino desconocido"}</span>
+                    <span>{localidades[viaje.id_destino] ? `${localidades[viaje.id_destino].nombre}, ${localidades[viaje.id_destino].pais}` : "Destino desconocido"}</span>
                   </div>
                 </div>
               </td>
@@ -82,11 +82,11 @@ export const ViajeTable = ({
                 <div className="flex flex-col gap-1">
                   <div className="flex items-center gap-1 text-xs">
                     <Calendar className="h-3 w-3" />
-                    <span>Salida: {format(new Date(viaje.fecha_salida_programada), "dd/MM/yyyy", { locale: es })}</span>
+                    <span>Salida: {format(new Date(viaje.fecha_salida_programada), "dd/MM/yyyy HH:mm", { locale: es })}</span>
                   </div>
                   <div className="flex items-center gap-1 text-xs">
-                    <Clock className="h-3 w-3" />
-                    <span>Hora: {format(new Date(viaje.fecha_salida_programada), "HH:mm", { locale: es })}</span>
+                    <Calendar className="h-3 w-3" />
+                    <span>Llegada: {format(new Date(viaje.fecha_llegada_programada), "dd/MM/yyyy HH:mm", { locale: es })}</span>
                   </div>
                 </div>
               </td>

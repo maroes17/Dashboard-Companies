@@ -192,6 +192,9 @@ export type Localidad = {
   direccion?: string;
   ciudad?: string;
   pais?: string;
+  es_puerto: boolean;
+  es_aduana: boolean;
+  es_deposito_contenedores: boolean;
   creado_en: string;
   actualizado_en: string;
 };
@@ -232,112 +235,102 @@ export type TipoEtapa = {
   tipo_viaje: 'ida' | 'vuelta';
   requiere_localidad: boolean;
   tipo_localidad?: 'puerto' | 'aduana' | 'cliente' | 'deposito';
+  localidades_especificas?: Array<{
+    nombre: string;
+    ciudad: string;
+    pais: string;
+  }>;
 };
 
-// Tipos de etapas para viajes de ida
-export const ETAPAS_VIAJE_IDA: TipoEtapa[] = [
-  {
-    id: 'retiro_contenedor',
-    nombre: 'Retiro de Contenedor',
-    descripcion: 'Retiro de contenedor con carga',
-    orden: 1,
-    tipo_viaje: 'ida',
-    requiere_localidad: true,
-    tipo_localidad: 'puerto'
-  },
-  {
-    id: 'aduana',
-    nombre: 'Aduana',
-    descripcion: 'Espera y trámites en aduana',
-    orden: 2,
-    tipo_viaje: 'ida',
-    requiere_localidad: true,
-    tipo_localidad: 'aduana'
-  },
-  {
-    id: 'tramites_puerto_seco',
-    nombre: 'Trámites Puerto Seco',
-    descripcion: 'Espera de instrucciones del cliente para entrega',
-    orden: 3,
-    tipo_viaje: 'ida',
-    requiere_localidad: false
-  },
-  {
-    id: 'entrega_carga',
-    nombre: 'Entrega de Carga',
-    descripcion: 'Entrega de la carga al cliente',
-    orden: 4,
-    tipo_viaje: 'ida',
-    requiere_localidad: true,
-    tipo_localidad: 'cliente'
-  },
-  {
-    id: 'despacho_deposito',
-    nombre: 'Despacho de Contenedor a Depósito',
-    descripcion: 'Entrega de contenedor vacío a depósito',
-    orden: 5,
-    tipo_viaje: 'ida',
-    requiere_localidad: true,
-    tipo_localidad: 'deposito'
+// Función para obtener las etapas según el tipo de viaje
+export const getEtapasByTipoViaje = (tipo_viaje: 'ida' | 'vuelta'): TipoEtapa[] => {
+  if (tipo_viaje === 'ida') {
+    return [
+      {
+        id: 'retiro_contenedor',
+        nombre: 'Retiro de Contenedor',
+        descripcion: 'Retiro de contenedor con carga',
+        orden: 1,
+        tipo_viaje: 'ida',
+        requiere_localidad: true,
+        tipo_localidad: 'puerto'
+      },
+      {
+        id: 'aduana',
+        nombre: 'Aduana',
+        descripcion: 'Espera y trámites en aduana',
+        orden: 2,
+        tipo_viaje: 'ida',
+        requiere_localidad: true,
+        tipo_localidad: 'aduana'
+      },
+      {
+        id: 'tramites_puerto_seco',
+        nombre: 'Trámites Puerto Seco',
+        descripcion: 'Espera de instrucciones del cliente para entrega',
+        orden: 3,
+        tipo_viaje: 'ida',
+        requiere_localidad: false
+      },
+      {
+        id: 'entrega_carga',
+        nombre: 'Entrega de Carga',
+        descripcion: 'Entrega de la carga al cliente',
+        orden: 4,
+        tipo_viaje: 'ida',
+        requiere_localidad: true,
+        tipo_localidad: 'cliente'
+      },
+      {
+        id: 'despacho_deposito',
+        nombre: 'Despacho de Contenedor a Depósito',
+        descripcion: 'Entrega de contenedor vacío a depósito',
+        orden: 5,
+        tipo_viaje: 'ida',
+        requiere_localidad: true,
+        tipo_localidad: 'deposito'
+      }
+    ];
   }
-] as const;
-
-// Tipos de etapas para viajes de vuelta
-export const ETAPAS_VIAJE_VUELTA: TipoEtapa[] = [
-  {
-    id: 'retiro_contenedor',
-    nombre: 'Retiro de Contenedor',
-    descripcion: 'Retiro de contenedor vacío del depósito',
-    orden: 1,
-    tipo_viaje: 'vuelta',
-    requiere_localidad: true,
-    tipo_localidad: 'deposito'
-  },
-  {
-    id: 'carga_ciudad',
-    nombre: 'Carga en Ciudad',
-    descripcion: 'Carga en ciudad indicada',
-    orden: 2,
-    tipo_viaje: 'vuelta',
-    requiere_localidad: true,
-    tipo_localidad: 'cliente'
-  },
-  {
-    id: 'transito_mendoza',
-    nombre: 'Tránsito a Mendoza',
-    descripcion: 'Viaje hacia Mendoza',
-    orden: 3,
-    tipo_viaje: 'vuelta',
-    requiere_localidad: false
-  },
-  {
-    id: 'paso_libertadores',
-    nombre: 'Paso Los Libertadores',
-    descripcion: 'Paso por el Paso Internacional Los Libertadores',
-    orden: 4,
-    tipo_viaje: 'vuelta',
-    requiere_localidad: true,
-    tipo_localidad: 'aduana'
-  },
-  {
-    id: 'aduana_chilena',
-    nombre: 'Aduana Chilena',
-    descripcion: 'Trámites en aduana chilena',
-    orden: 5,
-    tipo_viaje: 'vuelta',
-    requiere_localidad: true,
-    tipo_localidad: 'aduana'
-  },
-  {
-    id: 'entrega_san_antonio',
-    nombre: 'Entrega en San Antonio',
-    descripcion: 'Entrega del contenedor en Puerto San Antonio',
-    orden: 6,
-    tipo_viaje: 'vuelta',
-    requiere_localidad: true,
-    tipo_localidad: 'puerto'
-  }
-] as const;
+  return [
+    {
+      id: 'retiro_contenedor',
+      nombre: 'Retiro de Contenedor',
+      descripcion: 'Retiro de contenedor vacío',
+      orden: 1,
+      tipo_viaje: 'vuelta',
+      requiere_localidad: true,
+      tipo_localidad: 'deposito'
+    },
+    {
+      id: 'carga_cliente',
+      nombre: 'Carga en Cliente',
+      descripcion: 'Se carga el contenedor con producto',
+      orden: 2,
+      tipo_viaje: 'vuelta',
+      requiere_localidad: true,
+      tipo_localidad: 'cliente'
+    },
+    {
+      id: 'aduana',
+      nombre: 'Aduana',
+      descripcion: 'Tramites y documentos aduana',
+      orden: 3,
+      tipo_viaje: 'vuelta',
+      requiere_localidad: true,
+      tipo_localidad: 'aduana'
+    },
+    {
+      id: 'descarga_puerto',
+      nombre: 'Descarga en Puerto',
+      descripcion: 'Entrega de contenedor con carga a puerto',
+      orden: 4,
+      tipo_viaje: 'vuelta',
+      requiere_localidad: true,
+      tipo_localidad: 'puerto'
+    }
+  ];
+};
 
 // Tipo para etapas de viaje
 export type EtapaViaje = {
@@ -351,6 +344,11 @@ export type EtapaViaje = {
   observaciones?: string;
   creado_en: string;
   actualizado_en: string;
+  localidad_temporal?: {
+    nombre: string;
+    ciudad: string;
+    pais: string;
+  };
 };
 
 // Tipo para incidentes de viaje

@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS etapas_viaje (
     fecha_programada TIMESTAMP WITH TIME ZONE NOT NULL,
     fecha_realizada TIMESTAMP WITH TIME ZONE,
     observaciones TEXT,
+    localidad_temporal JSONB,
     creado_en TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     actualizado_en TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );

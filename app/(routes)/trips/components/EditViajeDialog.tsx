@@ -42,11 +42,21 @@ interface DocumentoViaje {
   actualizado_en: string;
 }
 
+interface OrigenDestino {
+  id_origen_destino: number;
+  nombre: string;
+  ciudad: string;
+  pais: string;
+  tipo: 'origen' | 'destino' | 'ambos';
+  activo: boolean;
+}
+
 interface EditViajeDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   viaje: Viaje | null;
   onSave: (viaje: Viaje) => Promise<void>;
+  localidades?: Record<string, Localidad>;
 }
 
 export function EditViajeDialog({
@@ -54,9 +64,10 @@ export function EditViajeDialog({
   onOpenChange,
   viaje,
   onSave,
+  localidades = {},
 }: EditViajeDialogProps) {
   const [isLoading, setIsLoading] = useState(false);
-  const [localidades, setLocalidades] = useState<Localidad[]>([]);
+  const [origenesDestinos, setOrigenesDestinos] = useState<OrigenDestino[]>([]);
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [conductores, setConductores] = useState<Driver[]>([]);
   const [vehiculos, setVehiculos] = useState<Fleet[]>([]);
@@ -102,74 +113,102 @@ export function EditViajeDialog({
     setIsLoading(true);
 
     try {
-      // Cargar localidades
-      const { data: localidadesData, error: localidadesError } = await supabase
-        .from('localidades')
+      // Cargar orígenes y destinos
+      const { data: origenesDestinosData, error: origenesDestinosError } = await supabase
+        .from('origenes_destinos')
         .select('*')
-        .order('nombre');
+        .eq('activo', true)
+        .order('pais', { ascending: true })
+        .order('ciudad', { ascending: true });
       
-      if (localidadesError) {
-        console.error("Error al cargar localidades:", localidadesError);
-        // Usar datos de muestra si hay un error
-        setLocalidades(mockLocalidades);
-      } else if (localidadesData && localidadesData.length > 0) {
-        setLocalidades(localidadesData);
-      } else {
-        // Si no hay datos, usar datos de muestra
-        setLocalidades(mockLocalidades);
+      if (origenesDestinosError) {
+        console.error("Error al cargar orígenes y destinos:", origenesDestinosError);
+        toast({
+          title: "Error",
+          description: "No se pudieron cargar los orígenes y destinos",
+          variant: "destructive",
+        });
+        return;
       }
+
+      if (!origenesDestinosData || origenesDestinosData.length === 0) {
+        toast({
+          title: "Error",
+          description: "No hay orígenes y destinos disponibles en la base de datos",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setOrigenesDestinos(origenesDestinosData);
 
       // Cargar clientes
       const { data: clientesData, error: clientesError } = await supabase
         .from('clientes')
         .select('*')
         .order('razon_social');
-      
-      if (clientesError) {
-        console.error("Error al cargar clientes:", clientesError);
-      } else if (clientesData) {
-        setClientes(clientesData);
-      }
 
-      // Cargar conductores
+      if (clientesError) throw clientesError;
+      setClientes(clientesData || []);
+
+      // Cargar conductores disponibles
       const { data: conductoresData, error: conductoresError } = await supabase
         .from('choferes')
         .select('*')
         .order('nombre_completo');
-      
-      if (conductoresError) {
-        console.error("Error al cargar conductores:", conductoresError);
-      } else if (conductoresData) {
-        setConductores(conductoresData);
+
+      if (conductoresError) throw conductoresError;
+
+      // Obtener los IDs de los conductores que tienen viajes asignados en estado "en_ruta" o "planificado"
+      const { data: viajesActivos, error: viajesError } = await supabase
+        .from('viajes')
+        .select('id_chofer')
+        .in('estado', ['en_ruta', 'planificado'])
+        .neq('id_viaje', viaje?.id_viaje || 0); // Excluir el viaje actual si estamos editando
+
+      if (viajesError) throw viajesError;
+
+      // Filtrar los conductores disponibles
+      const conductoresOcupados = new Set(viajesActivos?.map(v => v.id_chofer) || []);
+      const conductoresDisponibles = conductoresData?.filter(
+        conductor => !conductoresOcupados.has(conductor.id_chofer)
+      ) || [];
+
+      // Si estamos editando un viaje, incluir el conductor actual si existe
+      if (viaje?.id_chofer) {
+        const conductorActual = conductoresData?.find(c => c.id_chofer === viaje.id_chofer);
+        if (conductorActual && !conductoresDisponibles.some(c => c.id_chofer === conductorActual.id_chofer)) {
+          conductoresDisponibles.push(conductorActual);
+        }
       }
+
+      setConductores(conductoresDisponibles);
 
       // Cargar vehículos
       const { data: vehiculosData, error: vehiculosError } = await supabase
         .from('flota')
         .select('*')
         .order('patente');
-      
-      if (vehiculosError) {
-        console.error("Error al cargar vehículos:", vehiculosError);
-      } else if (vehiculosData) {
-        setVehiculos(vehiculosData);
-      }
+
+      if (vehiculosError) throw vehiculosError;
+      setVehiculos(vehiculosData || []);
 
       // Cargar semirremolques
       const { data: semirremolquesData, error: semirremolquesError } = await supabase
         .from('semirremolques')
         .select('*')
         .order('patente');
-      
-      if (semirremolquesError) {
-        console.error("Error al cargar semirremolques:", semirremolquesError);
-      } else if (semirremolquesData) {
-        setSemirremolques(semirremolquesData);
-      }
+
+      if (semirremolquesError) throw semirremolquesError;
+      setSemirremolques(semirremolquesData || []);
+
     } catch (error) {
-      console.error("Error al cargar datos iniciales:", error);
-      // Asegurar que siempre haya localidades disponibles usando datos de muestra
-      setLocalidades(mockLocalidades);
+      console.error('Error al cargar datos iniciales:', error);
+      toast({
+        title: "Error",
+        description: "No se pudieron cargar los datos iniciales",
+        variant: "destructive",
+      });
     } finally {
       setIsLoading(false);
     }
@@ -369,10 +408,31 @@ export function EditViajeDialog({
       ? Number(value)
       : value;
 
-    setFormData(prev => {
-      if (!prev) return null;
-      return { ...prev, [field]: processedValue };
-    });
+    // Asegurar que el tipo de viaje sea correcto
+    if (field === 'tipo_viaje' && (value === 'ida' || value === 'vuelta')) {
+      console.log('Cambiando tipo de viaje a:', value);
+      const localidadesArray = Object.values(localidades);
+      const origenesChile = localidadesArray.filter(loc => loc.pais === 'Chile');
+      const destinosArgentina = localidadesArray.filter(loc => loc.pais === 'Argentina');
+      const nuevoOrigen = value === 'ida' ? origenesChile[0]?.id_localidad : destinosArgentina[0]?.id_localidad;
+      const nuevoDestino = value === 'ida' ? destinosArgentina[0]?.id_localidad : origenesChile[0]?.id_localidad;
+      
+      setFormData(prev => {
+        if (!prev) return null;
+        
+        return { 
+          ...prev, 
+          [field]: value as 'ida' | 'vuelta',
+          id_origen: nuevoOrigen || 0,
+          id_destino: nuevoDestino || 0
+        };
+      });
+    } else {
+      setFormData(prev => {
+        if (!prev) return null;
+        return { ...prev, [field]: processedValue };
+      });
+    }
     
     // Limpiar errores al editar
     if (validationErrors[field]) {
@@ -382,18 +442,11 @@ export function EditViajeDialog({
         return newErrors;
       });
     }
-    
+
     // Si se seleccionó un conductor, buscar su vehículo y semirremolque asociados
     if (field === 'id_chofer') {
       try {
         setIsLoading(true);
-        
-        // Si hay un conductor (valor diferente de 0), establecer estado "en_ruta", de lo contrario "planificado"
-        const nuevoEstado = typeof processedValue === 'number' && processedValue > 0 ? "en_ruta" : "planificado";
-        setFormData(prev => {
-          if (!prev) return null;
-          return { ...prev, estado: nuevoEstado };
-        });
         
         if (typeof processedValue === 'number' && processedValue > 0) {
           // Buscar el conductor seleccionado para mostrar su nombre en los logs
@@ -576,15 +629,98 @@ export function EditViajeDialog({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!formData || !validateForm()) return;
-    
+    if (!formData) return;
+
+    if (!validateForm()) {
+      toast({
+        title: "Error",
+        description: "Por favor, corrige los errores en el formulario",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsLoading(true);
+
     try {
-      setIsLoading(true);
-      await onSave(formData);
+      // Verificar que las localidades existan en origenes_destinos
+      const { data: origenesDestinosExistentes, error: errorOrigenesDestinos } = await supabase
+        .from('origenes_destinos')
+        .select('id_origen_destino')
+        .in('id_origen_destino', [formData.id_origen, formData.id_destino]);
+
+      if (errorOrigenesDestinos) {
+        throw errorOrigenesDestinos;
+      }
+
+      if (!origenesDestinosExistentes || origenesDestinosExistentes.length !== 2) {
+        toast({
+          title: "Error",
+          description: "Las localidades seleccionadas no existen en la base de datos",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Actualizar el viaje
+      const { error: errorViaje } = await supabase
+        .from('viajes')
+        .update({
+          id_cliente: formData.id_cliente,
+          id_chofer: formData.id_chofer,
+          id_flota: formData.id_flota,
+          id_semirremolque: formData.id_semirremolque,
+          id_origen: formData.id_origen,
+          id_destino: formData.id_destino,
+          tipo_viaje: formData.tipo_viaje,
+          estado: formData.estado,
+          prioridad: formData.prioridad,
+          fecha_salida_programada: formData.fecha_salida_programada,
+          fecha_llegada_programada: formData.fecha_llegada_programada,
+          fecha_salida_real: formData.fecha_salida_real,
+          fecha_llegada_real: formData.fecha_llegada_real,
+          contenedor: formData.contenedor,
+          nro_guia: formData.nro_guia,
+          nro_control: formData.nro_control,
+          factura: formData.factura,
+          empresa: formData.empresa,
+          observaciones: formData.observaciones,
+          actualizado_en: new Date().toISOString()
+        })
+        .eq('id_viaje', formData.id_viaje);
+
+      if (errorViaje) throw errorViaje;
+
+      // Guardar los documentos
+      if (documentos.length > 0) {
+        const documentosConViajeId = documentos.map(doc => ({
+          ...doc,
+          id_viaje: formData.id_viaje
+        }));
+
+        const { error: documentosError } = await supabase
+          .from('documentos_viaje')
+          .insert(documentosConViajeId);
+
+        if (documentosError) throw documentosError;
+      }
+
+      toast({
+        title: "Éxito",
+        description: "Viaje actualizado correctamente",
+      });
+
       onOpenChange(false);
-    } catch (error) {
-      console.error("Error al actualizar viaje:", error);
+      if (typeof onSave === 'function') {
+        await onSave(formData);
+      }
+    } catch (error: any) {
+      console.error('Error al actualizar viaje:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Error al actualizar el viaje",
+        variant: "destructive",
+      });
     } finally {
       setIsLoading(false);
     }
@@ -641,20 +777,22 @@ export function EditViajeDialog({
                   <Select
                     value={formData.id_origen?.toString() || ""}
                     onValueChange={(value) => handleSelectChange('id_origen', value)}
-                    disabled={isLoading || localidades.length === 0}
+                    disabled={isLoading || !localidades || Object.keys(localidades).length === 0}
                   >
                     <SelectTrigger className={validationErrors.id_origen ? "border-destructive" : ""}>
-                      <SelectValue placeholder={localidades.length === 0 ? "Cargando localidades..." : "Seleccionar origen"} />
+                      <SelectValue placeholder={!localidades || Object.keys(localidades).length === 0 ? "Cargando orígenes..." : "Seleccionar origen"} />
                     </SelectTrigger>
                     <SelectContent>
-                      {localidades.map((localidad) => (
-                        <SelectItem 
-                          key={localidad.id_localidad} 
-                          value={localidad.id_localidad.toString()}
-                        >
-                          {localidad.nombre}, {localidad.pais}
-                        </SelectItem>
-                      ))}
+                      {Object.values(localidades || {})
+                        .filter(loc => formData.tipo_viaje === 'ida' ? loc.pais === 'Chile' : loc.pais === 'Argentina')
+                        .map((origen) => (
+                          <SelectItem 
+                            key={origen.id_localidad} 
+                            value={origen.id_localidad.toString()}
+                          >
+                            {origen.nombre}, {origen.pais}
+                          </SelectItem>
+                        ))}
                     </SelectContent>
                   </Select>
                   {validationErrors.id_origen && (
@@ -670,20 +808,22 @@ export function EditViajeDialog({
                   <Select
                     value={formData.id_destino?.toString() || ""}
                     onValueChange={(value) => handleSelectChange('id_destino', value)}
-                    disabled={isLoading || localidades.length === 0}
+                    disabled={isLoading || !localidades || Object.keys(localidades).length === 0}
                   >
                     <SelectTrigger className={validationErrors.id_destino ? "border-destructive" : ""}>
-                      <SelectValue placeholder={localidades.length === 0 ? "Cargando localidades..." : "Seleccionar destino"} />
+                      <SelectValue placeholder={!localidades || Object.keys(localidades).length === 0 ? "Cargando destinos..." : "Seleccionar destino"} />
                     </SelectTrigger>
                     <SelectContent>
-                      {localidades.map((localidad) => (
-                        <SelectItem 
-                          key={localidad.id_localidad} 
-                          value={localidad.id_localidad.toString()}
-                        >
-                          {localidad.nombre}, {localidad.pais}
-                        </SelectItem>
-                      ))}
+                      {Object.values(localidades || {})
+                        .filter(loc => formData.tipo_viaje === 'ida' ? loc.pais === 'Argentina' : loc.pais === 'Chile')
+                        .map((destino) => (
+                          <SelectItem 
+                            key={destino.id_localidad} 
+                            value={destino.id_localidad.toString()}
+                          >
+                            {destino.nombre}, {destino.pais}
+                          </SelectItem>
+                        ))}
                     </SelectContent>
                   </Select>
                   {validationErrors.id_destino && (

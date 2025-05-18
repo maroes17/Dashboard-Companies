@@ -82,60 +82,116 @@ export function EtapasViajeDialog({
   };
 
   const crearEtapasIniciales = async () => {
-    const etapasBase = viaje.tipo_viaje === 'ida' ? ETAPAS_VIAJE_IDA : ETAPAS_VIAJE_VUELTA;
-    const nuevasEtapas = etapasBase.map(etapa => {
-      // Determinar la localidad según el tipo de etapa
-      let idLocalidad: number;
-      
-      switch (etapa.tipo_localidad) {
-        case 'puerto':
-          idLocalidad = viaje.tipo_viaje === 'ida' ? viaje.id_origen : viaje.id_destino;
-          break;
-        case 'aduana':
-          idLocalidad = viaje.tipo_viaje === 'ida' ? viaje.id_origen : viaje.id_destino;
-          break;
-        case 'cliente':
-          idLocalidad = viaje.tipo_viaje === 'ida' ? viaje.id_destino : viaje.id_origen;
-          break;
-        case 'deposito':
-          idLocalidad = viaje.tipo_viaje === 'ida' ? viaje.id_destino : viaje.id_origen;
-          break;
-        default:
-          // Si no requiere localidad, usar la localidad de destino
-          idLocalidad = viaje.id_destino;
+    try {
+      const etapasBase = viaje.tipo_viaje === 'ida' ? ETAPAS_VIAJE_IDA : ETAPAS_VIAJE_VUELTA;
+      const nuevasEtapas = etapasBase.map((etapa: TipoEtapa) => {
+        // Si es un viaje de vuelta y tiene localidades específicas, usar la primera localidad por defecto
+        if (viaje.tipo_viaje === 'vuelta' && etapa.localidades_especificas && etapa.localidades_especificas.length > 0) {
+          const localidadDefault = etapa.localidades_especificas[0];
+          return {
+            id_viaje: viaje.id_viaje,
+            id_localidad: 0, // Se asignará cuando se guarde en la base de datos
+            tipo_etapa: etapa.id,
+            estado: 'pendiente',
+            fecha_programada: new Date().toISOString(),
+            observaciones: '',
+            creado_en: new Date().toISOString(),
+            actualizado_en: new Date().toISOString(),
+            localidad_temporal: localidadDefault // Guardamos la información de la localidad temporalmente
+          };
+        }
+
+        // Para viajes de ida o etapas sin localidades específicas, usar la lógica original
+        let idLocalidad: number;
+        switch (etapa.tipo_localidad) {
+          case 'puerto':
+            idLocalidad = viaje.tipo_viaje === 'ida' ? viaje.id_origen : viaje.id_destino;
+            break;
+          case 'aduana':
+            idLocalidad = viaje.tipo_viaje === 'ida' ? viaje.id_origen : viaje.id_destino;
+            break;
+          case 'cliente':
+            idLocalidad = viaje.tipo_viaje === 'ida' ? viaje.id_destino : viaje.id_origen;
+            break;
+          case 'deposito':
+            idLocalidad = viaje.tipo_viaje === 'ida' ? viaje.id_destino : viaje.id_origen;
+            break;
+          default:
+            idLocalidad = viaje.id_destino;
+        }
+
+        return {
+          id_viaje: viaje.id_viaje,
+          id_localidad: idLocalidad,
+          tipo_etapa: etapa.id,
+          estado: 'pendiente',
+          fecha_programada: new Date().toISOString(),
+          observaciones: '',
+          creado_en: new Date().toISOString(),
+          actualizado_en: new Date().toISOString()
+        };
+      });
+
+      const { data, error } = await supabase
+        .from('etapas_viaje')
+        .insert(nuevasEtapas)
+        .select();
+
+      if (error) {
+        console.error('Error al crear etapas iniciales:', error);
+        toast({
+          title: "Error",
+          description: "No se pudieron crear las etapas iniciales.",
+          variant: "destructive",
+        });
+      } else {
+        await loadEtapas();
       }
-
-      return {
-        id_viaje: viaje.id_viaje,
-        id_localidad: idLocalidad,
-        tipo_etapa: etapa.id,
-        estado: 'pendiente',
-        fecha_programada: new Date().toISOString(),
-        observaciones: '',
-        creado_en: new Date().toISOString(),
-        actualizado_en: new Date().toISOString()
-      };
-    });
-
-    const { data, error } = await supabase
-      .from('etapas_viaje')
-      .insert(nuevasEtapas)
-      .select();
-
-    if (error) {
+    } catch (error) {
       console.error('Error al crear etapas iniciales:', error);
       toast({
         title: "Error",
         description: "No se pudieron crear las etapas iniciales.",
         variant: "destructive",
       });
-    } else {
-      await loadEtapas();
     }
   };
 
+  const getLocalidadesDisponibles = (etapa: EtapaViaje) => {
+    const etapaInfo = getEtapaConfig(etapa.tipo_etapa);
+    
+    if (!etapaInfo) return [];
+
+    console.log('Tipo de viaje:', viaje.tipo_viaje);
+    console.log('Etapa info:', etapaInfo);
+
+    // Para viajes de vuelta, usar las localidades específicas definidas
+    if (viaje.tipo_viaje === 'vuelta' && etapaInfo.localidades_especificas) {
+      console.log('Usando localidades específicas para viaje de vuelta:', etapaInfo.localidades_especificas);
+      return etapaInfo.localidades_especificas.map(loc => ({
+        id_localidad: 0,
+        nombre: `${loc.nombre} - ${loc.ciudad}`,
+        tipo: etapaInfo.tipo_localidad || 'cliente',
+        ciudad: loc.ciudad,
+        pais: loc.pais,
+        creado_en: new Date().toISOString(),
+        actualizado_en: new Date().toISOString()
+      }));
+    }
+
+    // Para viajes de ida, usar las localidades de la base de datos
+    const localidadesFiltradas = Object.values(localidades).filter(localidad => 
+      localidad.tipo === etapaInfo.tipo_localidad
+    );
+    console.log('Usando localidades de la base de datos:', localidadesFiltradas);
+    return localidadesFiltradas;
+  };
+
   const getEtapaConfig = (tipoEtapa: string): TipoEtapa | undefined => {
-    return [...ETAPAS_VIAJE_IDA, ...ETAPAS_VIAJE_VUELTA].find(e => e.id === tipoEtapa);
+    const etapas = viaje.tipo_viaje === 'vuelta' ? ETAPAS_VIAJE_VUELTA : ETAPAS_VIAJE_IDA;
+    const etapa = etapas.find(e => e.id === tipoEtapa);
+    console.log('Buscando configuración de etapa:', { tipoEtapa, tipoViaje: viaje.tipo_viaje, etapa });
+    return etapa;
   };
 
   const handleEtapaCheck = async (etapa: EtapaViaje, checked: boolean) => {
@@ -248,36 +304,50 @@ export function EtapasViajeDialog({
     }
   };
 
-  const handleLocalidadChange = async (etapa: EtapaViaje, idLocalidad: number) => {
+  const handleLocalidadChange = async (etapa: EtapaViaje, nuevaLocalidadId: number | string) => {
     try {
-      const { error } = await supabase
-        .from('etapas_viaje')
-        .update({
-          id_localidad: idLocalidad,
-          actualizado_en: new Date().toISOString()
-        })
-        .eq('id_etapa', etapa.id_etapa);
+      const etapaInfo = getEtapaConfig(etapa.tipo_etapa);
+      console.log('Cambiando localidad:', { etapa, nuevaLocalidadId, etapaInfo });
+      
+      // Si es un viaje de vuelta y tiene localidades específicas
+      if (viaje.tipo_viaje === 'vuelta' && etapaInfo?.localidades_especificas) {
+        // Buscar la localidad seleccionada en las localidades específicas
+        const localidadSeleccionada = etapaInfo.localidades_especificas.find(
+          loc => `${loc.nombre} - ${loc.ciudad}` === nuevaLocalidadId
+        );
 
-      if (error) throw error;
+        if (localidadSeleccionada) {
+          console.log('Localidad específica seleccionada:', localidadSeleccionada);
+          // Actualizar la etapa con la información de la localidad temporal
+          const { error } = await supabase
+            .from('etapas_viaje')
+            .update({
+              localidad_temporal: localidadSeleccionada,
+              actualizado_en: new Date().toISOString()
+            })
+            .eq('id_etapa', etapa.id_etapa);
 
-      // Actualizar el estado local
-      setEtapas(prevEtapas => 
-        prevEtapas.map(e => 
-          e.id_etapa === etapa.id_etapa 
-            ? { ...e, id_localidad: idLocalidad, localidad: localidades[idLocalidad] }
-            : e
-        )
-      );
+          if (error) throw error;
+        }
+      } else {
+        // Para viajes de ida o etapas sin localidades específicas, usar la lógica original
+        const { error } = await supabase
+          .from('etapas_viaje')
+          .update({
+            id_localidad: nuevaLocalidadId,
+            actualizado_en: new Date().toISOString()
+          })
+          .eq('id_etapa', etapa.id_etapa);
 
-      toast({
-        title: "Éxito",
-        description: "Localidad actualizada correctamente",
-      });
+        if (error) throw error;
+      }
+
+      await loadEtapas();
     } catch (error) {
       console.error('Error al actualizar localidad:', error);
       toast({
         title: "Error",
-        description: "Error al actualizar la localidad",
+        description: "No se pudo actualizar la localidad de la etapa.",
         variant: "destructive",
       });
     }
@@ -337,7 +407,7 @@ export function EtapasViajeDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Etapas del Viaje</DialogTitle>
+          <DialogTitle>Etapas del Viaje - {viaje.tipo_viaje}</DialogTitle>
         </DialogHeader>
         <ScrollArea className="max-h-[60vh]">
           {isLoading ? (
@@ -356,6 +426,13 @@ export function EtapasViajeDialog({
                 const fechaRealizada = etapa.fecha_realizada 
                   ? format(new Date(etapa.fecha_realizada), "dd/MM/yyyy HH:mm", { locale: es })
                   : null;
+
+                const localidadesDisponibles = getLocalidadesDisponibles(etapa);
+                console.log('Localidades disponibles para etapa:', {
+                  tipoEtapa: etapa.tipo_etapa,
+                  tipoViaje: viaje.tipo_viaje,
+                  localidades: localidadesDisponibles
+                });
 
                 return (
                   <div
@@ -385,27 +462,22 @@ export function EtapasViajeDialog({
                         {etapaInfo?.requiere_localidad && (
                           <div className="mt-2">
                             <Select
-                              value={etapa.id_localidad?.toString()}
-                              onValueChange={(value) => handleLocalidadChange(etapa, parseInt(value))}
+                              value={etapa.id_localidad?.toString() || etapa.localidad_temporal?.nombre}
+                              onValueChange={(value) => handleLocalidadChange(etapa, value)}
                               disabled={isCompleted}
                             >
                               <SelectTrigger className="w-full">
                                 <SelectValue placeholder="Seleccionar localidad" />
                               </SelectTrigger>
                               <SelectContent>
-                                {Object.values(localidades)
-                                  .filter(localidad => {
-                                    // Filtrado por tipo de localidad según la etapa
-                                    return localidad.tipo === etapaInfo.tipo_localidad;
-                                  })
-                                  .map(localidad => (
-                                    <SelectItem 
-                                      key={localidad.id_localidad} 
-                                      value={localidad.id_localidad.toString()}
-                                    >
-                                      {localidad.nombre} - {localidad.ciudad}, {localidad.pais}
-                                    </SelectItem>
-                                  ))}
+                                {localidadesDisponibles.map(localidad => (
+                                  <SelectItem 
+                                    key={localidad.id_localidad || localidad.nombre} 
+                                    value={localidad.id_localidad?.toString() || localidad.nombre}
+                                  >
+                                    {localidad.nombre}
+                                  </SelectItem>
+                                ))}
                               </SelectContent>
                             </Select>
                           </div>

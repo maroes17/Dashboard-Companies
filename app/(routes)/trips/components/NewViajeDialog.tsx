@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Viaje, Localidad, Cliente, Driver, Fleet, Semirremolque, supabase, ETAPAS_VIAJE_IDA, ETAPAS_VIAJE_VUELTA, TipoEtapa } from "@/lib/supabase";
+import { Viaje, Localidad, Cliente, Driver, Fleet, Semirremolque, supabase, getEtapasByTipoViaje, TipoEtapa } from "@/lib/supabase";
 import {
   Dialog,
   DialogContent,
@@ -51,6 +51,15 @@ interface DocumentoViaje {
   actualizado_en: string;
 }
 
+interface OrigenDestino {
+  id_origen_destino: number;
+  nombre: string;
+  ciudad: string;
+  pais: string;
+  tipo: 'origen' | 'destino' | 'ambos';
+  activo: boolean;
+}
+
 export function NewViajeDialog({
   open,
   onOpenChange,
@@ -58,7 +67,7 @@ export function NewViajeDialog({
 }: NewViajeDialogProps) {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
-  const [localidades, setLocalidades] = useState<Localidad[]>([]);
+  const [origenesDestinos, setOrigenesDestinos] = useState<OrigenDestino[]>([]);
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [conductores, setConductores] = useState<Driver[]>([]);
   const [vehiculos, setVehiculos] = useState<Fleet[]>([]);
@@ -70,7 +79,7 @@ export function NewViajeDialog({
   const [numeroDocumento, setNumeroDocumento] = useState("");
   
   const [formData, setFormData] = useState<Omit<Viaje, "id_viaje" | "creado_en" | "actualizado_en">>({
-    tipo_viaje: "ida",
+    tipo_viaje: "ida" as const,
     fecha_salida_programada: new Date().toISOString(),
     fecha_llegada_programada: addHours(new Date(), 48).toISOString(),
     id_origen: 0,
@@ -82,6 +91,7 @@ export function NewViajeDialog({
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [salidaDate, setSalidaDate] = useState<Date>(new Date());
   const [llegadaDate, setLlegadaDate] = useState<Date>(addHours(new Date(), 48));
+  const [localidades, setLocalidades] = useState<Record<number, Localidad>>({});
 
   // Cargar datos iniciales al abrir el diálogo
   useEffect(() => {
@@ -92,121 +102,55 @@ export function NewViajeDialog({
 
   const insertarLocalidadesBasicas = async () => {
     try {
-      // Verificar si ya existen localidades
+      // Primero, obtener las localidades existentes
       const { data: localidadesExistentes, error: errorVerificar } = await supabase
         .from('localidades')
-        .select('id_localidad')
-        .limit(1);
+        .select('nombre, ciudad, pais');
 
       if (errorVerificar) throw errorVerificar;
 
-      // Si ya existen localidades, no hacer nada
-      if (localidadesExistentes && localidadesExistentes.length > 0) {
-        return;
-      }
-
-      // Insertar localidades básicas
-      const localidadesBasicas = [
-        // Puertos
-        {
-          nombre: 'Puerto Central',
-          tipo: 'puerto',
-          ciudad: 'San Antonio',
-          pais: 'Chile'
-        },
-        {
-          nombre: 'Puerto STI',
-          tipo: 'puerto',
-          ciudad: 'San Antonio',
-          pais: 'Chile'
-        },
-        {
-          nombre: 'Puerto Valparaíso',
-          tipo: 'puerto',
-          ciudad: 'Valparaíso',
-          pais: 'Chile'
-        },
-        // Aduanas
-        {
-          nombre: 'Paso Fronterizo Los Libertadores',
-          tipo: 'aduana',
-          ciudad: 'Los Andes',
-          pais: 'Chile'
-        },
-        {
-          nombre: 'Uspallata',
-          tipo: 'aduana',
-          ciudad: 'Uspallata',
-          pais: 'Argentina'
-        },
-        {
-          nombre: 'Pino Hachado',
-          tipo: 'aduana',
-          ciudad: 'Victoria',
-          pais: 'Argentina'
-        },
-        // Clientes
-        {
-          nombre: 'Mar del Plata',
-          tipo: 'cliente',
-          ciudad: 'Mar del Plata',
-          pais: 'Argentina'
-        },
-        {
-          nombre: 'Santa Fe',
-          tipo: 'cliente',
-          ciudad: 'Santa Fe',
-          pais: 'Argentina'
-        },
-        {
-          nombre: 'Córdoba',
-          tipo: 'cliente',
-          ciudad: 'Córdoba',
-          pais: 'Argentina'
-        },
-        {
-          nombre: 'Buenos Aires',
-          tipo: 'cliente',
-          ciudad: 'Buenos Aires',
-          pais: 'Argentina'
-        },
-        {
-          nombre: 'Rosario',
-          tipo: 'cliente',
-          ciudad: 'Rosario',
-          pais: 'Argentina'
-        },
-        // Depósitos
-        {
-          nombre: 'Capitán Cortés',
-          tipo: 'deposito',
-          ciudad: 'Buenos Aires',
-          pais: 'Argentina'
-        },
-        {
-          nombre: 'Hiperbaires',
-          tipo: 'deposito',
-          ciudad: 'Buenos Aires',
-          pais: 'Argentina'
-        },
-        {
-          nombre: 'Mar Pacífico',
-          tipo: 'deposito',
-          ciudad: 'Mendoza',
-          pais: 'Argentina'
-        }
+      // Definir las localidades que queremos tener
+      const localidadesDeseadas = [
+        // Chile
+        { nombre: 'San Antonio', tipo: 'puerto', ciudad: 'San Antonio', pais: 'Chile' },
+        { nombre: 'Valparaíso', tipo: 'puerto', ciudad: 'Valparaíso', pais: 'Chile' },
+        { nombre: 'Los Andes', tipo: 'cliente', ciudad: 'Los Andes', pais: 'Chile' },
+        
+        // Argentina
+        { nombre: 'Buenos Aires', tipo: 'cliente', ciudad: 'Buenos Aires', pais: 'Argentina' },
+        { nombre: 'Córdoba', tipo: 'cliente', ciudad: 'Córdoba', pais: 'Argentina' },
+        { nombre: 'Mendoza', tipo: 'cliente', ciudad: 'Mendoza', pais: 'Argentina' },
+        { nombre: 'Rosario', tipo: 'cliente', ciudad: 'Rosario', pais: 'Argentina' },
+        { nombre: 'Santa Fe', tipo: 'cliente', ciudad: 'Santa Fe', pais: 'Argentina' },
+        { nombre: 'Mar del Plata', tipo: 'cliente', ciudad: 'Mar del Plata', pais: 'Argentina' },
+        { nombre: 'Victoria', tipo: 'cliente', ciudad: 'Victoria', pais: 'Argentina' }
       ];
 
-      const { error: errorInsertar } = await supabase
-        .from('localidades')
-        .insert(localidadesBasicas);
+      // Filtrar las localidades que no existen
+      const localidadesAFaltantes = localidadesDeseadas.filter(
+        localidad => !localidadesExistentes?.some(
+          existente => 
+            existente.nombre === localidad.nombre && 
+            existente.ciudad === localidad.ciudad && 
+            existente.pais === localidad.pais
+        )
+      );
 
-      if (errorInsertar) throw errorInsertar;
+      // Si hay localidades para insertar, hacerlo
+      if (localidadesAFaltantes.length > 0) {
+        const { error: errorInsertar } = await supabase
+          .from('localidades')
+          .insert(localidadesAFaltantes);
 
-      toast({
-        title: "Éxito",
-        description: "Se han creado las localidades básicas",
-      });
+        if (errorInsertar) throw errorInsertar;
+
+        toast({
+          title: "Éxito",
+          description: `Se han creado ${localidadesAFaltantes.length} localidades básicas`,
+        });
+      } else {
+        console.log('Todas las localidades básicas ya existen');
+      }
     } catch (error) {
       console.error('Error al insertar localidades básicas:', error);
       toast({
@@ -223,6 +167,56 @@ export function NewViajeDialog({
     try {
       // Intentar insertar localidades básicas si no existen
       await insertarLocalidadesBasicas();
+
+      // Cargar orígenes y destinos
+      const { data: origenesDestinosData, error: origenesDestinosError } = await supabase
+        .from('origenes_destinos')
+        .select('*')
+        .eq('activo', true)
+        .order('pais', { ascending: true })
+        .order('ciudad', { ascending: true });
+      
+      if (origenesDestinosError) {
+        console.error("Error al cargar orígenes y destinos:", origenesDestinosError);
+        toast({
+          title: "Error",
+          description: "No se pudieron cargar los orígenes y destinos",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (!origenesDestinosData || origenesDestinosData.length === 0) {
+        toast({
+          title: "Error",
+          description: "No hay orígenes y destinos disponibles en la base de datos",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setOrigenesDestinos(origenesDestinosData);
+      
+      // Establecer valores predeterminados
+      if (!formData.id_origen || formData.id_origen === 0) {
+        const origenDefault = origenesDestinosData.find(od => od.tipo === 'origen' || od.tipo === 'ambos');
+        if (origenDefault) {
+          setFormData(prev => ({ 
+            ...prev, 
+            id_origen: origenDefault.id_origen_destino 
+          }));
+        }
+      }
+      
+      if (!formData.id_destino || formData.id_destino === 0) {
+        const destinoDefault = origenesDestinosData.find(od => od.tipo === 'destino' || od.tipo === 'ambos');
+        if (destinoDefault) {
+          setFormData(prev => ({ 
+            ...prev, 
+            id_destino: destinoDefault.id_origen_destino
+          }));
+        }
+      }
 
       // Cargar localidades
       const { data: localidadesData, error: localidadesError } = await supabase
@@ -249,26 +243,11 @@ export function NewViajeDialog({
         return;
       }
 
-      setLocalidades(localidadesData);
-      
-      // Establecer valores predeterminados
-      if (!formData.id_origen || formData.id_origen === 0) {
-        setFormData(prev => ({ 
-          ...prev, 
-          id_origen: localidadesData[0].id_localidad 
-        }));
-      }
-      
-      if (!formData.id_destino || formData.id_destino === 0) {
-        // Seleccionar un destino diferente al origen si es posible
-        const destinoDefault = localidadesData.length > 1 ? 
-          localidadesData[1].id_localidad : 
-          localidadesData[0].id_localidad;
-          
-        setFormData(prev => ({ 
-          ...prev, 
-          id_destino: destinoDefault
-        }));
+      if (localidadesData) {
+        setLocalidades(localidadesData.reduce((acc, loc) => {
+          acc[loc.id_localidad] = loc;
+          return acc;
+        }, {} as Record<number, Localidad>));
       }
 
       // Cargar clientes
@@ -284,33 +263,29 @@ export function NewViajeDialog({
         setClientes(clientesData);
       }
 
-      // Cargar conductores
+      // Cargar conductores disponibles
       const { data: conductoresData, error: conductoresError } = await supabase
         .from('choferes')
         .select('*')
-        .eq('estado', 'activo')
         .order('nombre_completo');
-      
-      if (conductoresError) {
-        console.error("Error al cargar conductores:", conductoresError);
-      } else if (conductoresData) {
-        // Obtener los choferes que están en viajes en_ruta
-        const { data: viajesEnRuta, error: viajesError } = await supabase
-          .from('viajes')
-          .select('id_chofer')
-          .eq('estado', 'en_ruta');
 
-        if (viajesError) {
-          console.error("Error al cargar viajes en ruta:", viajesError);
-        } else {
-          // Crear un conjunto con los IDs de choferes ocupados
-          const choferesOcupados = new Set(viajesEnRuta?.map(v => v.id_chofer));
-          
-          // Filtrar los choferes para excluir los que están en viajes en_ruta
-          const choferesDisponibles = conductoresData.filter(chofer => !choferesOcupados.has(chofer.id_chofer));
-          setConductores(choferesDisponibles);
-        }
-      }
+      if (conductoresError) throw conductoresError;
+
+      // Obtener los IDs de los conductores que tienen viajes asignados en estado "en_ruta" o "planificado"
+      const { data: viajesActivos, error: viajesError } = await supabase
+        .from('viajes')
+        .select('id_chofer')
+        .in('estado', ['en_ruta', 'planificado']);
+
+      if (viajesError) throw viajesError;
+
+      // Filtrar los conductores disponibles
+      const conductoresOcupados = new Set(viajesActivos?.map(v => v.id_chofer) || []);
+      const conductoresDisponibles = conductoresData?.filter(
+        conductor => !conductoresOcupados.has(conductor.id_chofer)
+      ) || [];
+
+      setConductores(conductoresDisponibles);
 
       // Cargar vehículos
       const { data: vehiculosData, error: vehiculosError } = await supabase
@@ -439,7 +414,36 @@ export function NewViajeDialog({
       ? Number(value)
       : value;
 
-    setFormData(prev => ({ ...prev, [field]: processedValue }));
+    // Asegurar que el tipo de viaje sea correcto
+    if (field === 'tipo_viaje' && (value === 'ida' || value === 'vuelta')) {
+      console.log('Cambiando tipo de viaje a:', value);
+      setFormData(prev => ({ ...prev, [field]: value as 'ida' | 'vuelta' }));
+      
+      // Resetear origen y destino cuando cambia el tipo de viaje
+      const origenesChile = origenesDestinos.filter(od => od.pais === 'Chile');
+      const destinosArgentina = origenesDestinos.filter(od => od.pais === 'Argentina');
+      
+      console.log('Orígenes Chile:', origenesChile);
+      console.log('Destinos Argentina:', destinosArgentina);
+      
+      if (value === 'ida') {
+        // Para viajes de ida: origen en Chile, destino en Argentina
+        setFormData(prev => ({
+          ...prev,
+          id_origen: origenesChile[0]?.id_origen_destino || 0,
+          id_destino: destinosArgentina[0]?.id_origen_destino || 0
+        }));
+      } else {
+        // Para viajes de vuelta: origen en Argentina, destino en Chile
+        setFormData(prev => ({
+          ...prev,
+          id_origen: destinosArgentina[0]?.id_origen_destino || 0,
+          id_destino: origenesChile[0]?.id_origen_destino || 0
+        }));
+      }
+    } else {
+      setFormData(prev => ({ ...prev, [field]: processedValue }));
+    }
     
     // Limpiar errores al editar
     if (validationErrors[field]) {
@@ -448,6 +452,13 @@ export function NewViajeDialog({
         delete newErrors[field];
         return newErrors;
       });
+    }
+
+    // Si se cambia el tipo de viaje, actualizar las localidades disponibles
+    if (field === 'tipo_viaje' && (value === 'ida' || value === 'vuelta')) {
+      console.log('Tipo de viaje cambiado a:', value);
+      const etapas = getEtapasByTipoViaje(value as 'ida' | 'vuelta');
+      console.log('Etapas disponibles para el nuevo tipo de viaje:', etapas);
     }
     
     // Si se seleccionó un conductor, buscar su vehículo y semirremolque asociados
@@ -588,27 +599,107 @@ export function NewViajeDialog({
 
   const crearEtapasIniciales = async (idViaje: number) => {
     try {
-      const etapasBase = formData.tipo_viaje === 'ida' ? ETAPAS_VIAJE_IDA : ETAPAS_VIAJE_VUELTA;
-      const nuevasEtapas = etapasBase.map((etapa: TipoEtapa) => {
-        // Determinar la localidad según el tipo de etapa
+      console.log('Iniciando creación de etapas para viaje ID:', idViaje);
+      console.log('Tipo de viaje:', formData.tipo_viaje);
+      
+      const etapasBase = getEtapasByTipoViaje(formData.tipo_viaje as 'ida' | 'vuelta');
+      console.log('Etapas base obtenidas:', etapasBase);
+
+      // Obtener los orígenes y destinos seleccionados
+      const origenSeleccionado = origenesDestinos.find(od => od.id_origen_destino === formData.id_origen);
+      const destinoSeleccionado = origenesDestinos.find(od => od.id_origen_destino === formData.id_destino);
+
+      console.log('Origen seleccionado:', origenSeleccionado);
+      console.log('Destino seleccionado:', destinoSeleccionado);
+
+      if (!origenSeleccionado || !destinoSeleccionado) {
+        throw new Error('No se encontraron los orígenes y destinos seleccionados');
+      }
+
+      // Función auxiliar para obtener o crear localidad
+      const obtenerOCrearLocalidad = async (datos: { nombre: string; ciudad: string; pais: string; tipo: string }) => {
+        // Primero intentar obtener la localidad existente
+        const { data: localidadExistente, error: errorBusqueda } = await supabase
+          .from('localidades')
+          .select('*')
+          .eq('nombre', datos.nombre)
+          .eq('ciudad', datos.ciudad)
+          .eq('pais', datos.pais)
+          .single();
+
+        if (errorBusqueda && errorBusqueda.code !== 'PGRST116') { // PGRST116 es el código para "no se encontró"
+          throw new Error(`Error al buscar localidad: ${errorBusqueda.message}`);
+        }
+
+        if (localidadExistente) {
+          console.log('Localidad existente encontrada:', localidadExistente);
+          return localidadExistente;
+        }
+
+        // Si no existe, crear la nueva localidad
+        console.log('Creando nueva localidad:', datos);
+        const { data: nuevaLocalidad, error: errorCreacion } = await supabase
+          .from('localidades')
+          .insert([datos])
+          .select()
+          .single();
+
+        if (errorCreacion) {
+          throw new Error(`Error al crear localidad: ${errorCreacion.message}`);
+        }
+
+        return nuevaLocalidad;
+      };
+
+      // Obtener o crear localidad origen
+      console.log('Procesando localidad origen...');
+      const localidadOrigen = await obtenerOCrearLocalidad({
+        nombre: origenSeleccionado.nombre,
+        ciudad: origenSeleccionado.ciudad,
+        pais: origenSeleccionado.pais,
+        tipo: formData.tipo_viaje === 'ida' ? 'puerto' : 'cliente'
+      });
+
+      // Obtener o crear localidad destino
+      console.log('Procesando localidad destino...');
+      const localidadDestino = await obtenerOCrearLocalidad({
+        nombre: destinoSeleccionado.nombre,
+        ciudad: destinoSeleccionado.ciudad,
+        pais: destinoSeleccionado.pais,
+        tipo: formData.tipo_viaje === 'ida' ? 'cliente' : 'puerto'
+      });
+
+      console.log('Creando etapas con las localidades procesadas...');
+      const nuevasEtapas = etapasBase.map((etapa) => {
+        console.log('Procesando etapa:', etapa.nombre);
+        
+        // Determinar la localidad según el tipo de etapa y el tipo de viaje
         let idLocalidad: number;
         
-        switch (etapa.tipo_localidad) {
-          case 'puerto':
-            idLocalidad = formData.tipo_viaje === 'ida' ? formData.id_origen : formData.id_destino;
-            break;
-          case 'aduana':
-            idLocalidad = formData.tipo_viaje === 'ida' ? formData.id_origen : formData.id_destino;
-            break;
-          case 'cliente':
-            idLocalidad = formData.tipo_viaje === 'ida' ? formData.id_destino : formData.id_origen;
-            break;
-          case 'deposito':
-            idLocalidad = formData.tipo_viaje === 'ida' ? formData.id_destino : formData.id_origen;
-            break;
-          default:
-            // Si no requiere localidad, usar la localidad de destino
-            idLocalidad = formData.id_destino;
+        if (etapa.requiere_localidad) {
+          switch (etapa.tipo_localidad) {
+            case 'puerto':
+              idLocalidad = formData.tipo_viaje === 'ida' ? localidadOrigen.id_localidad : localidadDestino.id_localidad;
+              console.log(`Etapa ${etapa.nombre}: usando localidad puerto ID ${idLocalidad}`);
+              break;
+            case 'aduana':
+              idLocalidad = formData.tipo_viaje === 'ida' ? localidadOrigen.id_localidad : localidadDestino.id_localidad;
+              console.log(`Etapa ${etapa.nombre}: usando localidad aduana ID ${idLocalidad}`);
+              break;
+            case 'cliente':
+              idLocalidad = formData.tipo_viaje === 'ida' ? localidadDestino.id_localidad : localidadOrigen.id_localidad;
+              console.log(`Etapa ${etapa.nombre}: usando localidad cliente ID ${idLocalidad}`);
+              break;
+            case 'deposito':
+              idLocalidad = formData.tipo_viaje === 'ida' ? localidadDestino.id_localidad : localidadOrigen.id_localidad;
+              console.log(`Etapa ${etapa.nombre}: usando localidad depósito ID ${idLocalidad}`);
+              break;
+            default:
+              throw new Error(`Tipo de localidad no válido: ${etapa.tipo_localidad}`);
+          }
+        } else {
+          idLocalidad = localidadDestino.id_localidad;
+          console.log(`Etapa ${etapa.nombre}: usando localidad por defecto ID ${idLocalidad}`);
         }
 
         return {
@@ -623,23 +714,29 @@ export function NewViajeDialog({
         };
       });
 
-      const { error } = await supabase
+      console.log('Etapas a insertar:', nuevasEtapas);
+      const { error: errorEtapas } = await supabase
         .from('etapas_viaje')
         .insert(nuevasEtapas);
 
-      if (error) throw error;
+      if (errorEtapas) {
+        console.error('Error al insertar etapas:', errorEtapas);
+        throw new Error(`Error al insertar etapas: ${errorEtapas.message}`);
+      }
 
+      console.log('Etapas creadas exitosamente');
       toast({
         title: "Éxito",
         description: "Etapas del viaje creadas correctamente.",
       });
-    } catch (error) {
-      console.error('Error al crear etapas iniciales:', error);
+    } catch (error: any) {
+      console.error('Error detallado al crear etapas iniciales:', error);
       toast({
         title: "Error",
-        description: "No se pudieron crear las etapas iniciales del viaje.",
+        description: error.message || "No se pudieron crear las etapas iniciales del viaje.",
         variant: "destructive",
       });
+      throw error;
     }
   };
 
@@ -658,17 +755,17 @@ export function NewViajeDialog({
         return;
       }
 
-      // Verificar que las localidades existan
-      const { data: localidadesExistentes, error: errorLocalidades } = await supabase
-        .from('localidades')
-        .select('id_localidad')
-        .in('id_localidad', [formData.id_origen, formData.id_destino]);
+      // Verificar que las localidades existan en origenes_destinos
+      const { data: origenesDestinosExistentes, error: errorOrigenesDestinos } = await supabase
+        .from('origenes_destinos')
+        .select('id_origen_destino')
+        .in('id_origen_destino', [formData.id_origen, formData.id_destino]);
 
-      if (errorLocalidades) {
-        throw errorLocalidades;
+      if (errorOrigenesDestinos) {
+        throw errorOrigenesDestinos;
       }
 
-      if (!localidadesExistentes || localidadesExistentes.length !== 2) {
+      if (!origenesDestinosExistentes || origenesDestinosExistentes.length !== 2) {
         toast({
           title: "Error",
           description: "Las localidades seleccionadas no existen en la base de datos",
@@ -746,11 +843,11 @@ export function NewViajeDialog({
 
   const handleReset = () => {
     // Usar el primer y segundo elemento de localidades, o el primero dos veces si solo hay uno
-    const resetOrigin = localidades.length > 0 ? localidades[0].id_localidad : 0;
-    const resetDestination = localidades.length > 1 ? localidades[1].id_localidad : resetOrigin;
+    const resetOrigin = origenesDestinos.length > 0 ? origenesDestinos[0].id_origen_destino : 0;
+    const resetDestination = origenesDestinos.length > 1 ? origenesDestinos[1].id_origen_destino : resetOrigin;
     
     setFormData({
-      tipo_viaje: "ida",
+      tipo_viaje: "ida" as const,
       fecha_salida_programada: new Date().toISOString(),
       fecha_llegada_programada: addHours(new Date(), 48).toISOString(),
       id_origen: resetOrigin,
@@ -924,20 +1021,22 @@ export function NewViajeDialog({
                   <Select
                     value={formData.id_origen?.toString() || ""}
                     onValueChange={(value) => handleSelectChange('id_origen', value)}
-                    disabled={isLoading || localidades.length === 0}
+                    disabled={isLoading || Object.keys(localidades).length === 0}
                   >
                     <SelectTrigger className={validationErrors.id_origen ? "border-destructive" : ""}>
-                      <SelectValue placeholder={localidades.length === 0 ? "Cargando localidades..." : "Seleccionar origen"} />
+                      <SelectValue placeholder={Object.keys(localidades).length === 0 ? "Cargando orígenes..." : "Seleccionar origen"} />
                     </SelectTrigger>
                     <SelectContent>
-                      {localidades.map((localidad) => (
-                        <SelectItem 
-                          key={localidad.id_localidad} 
-                          value={localidad.id_localidad.toString()}
-                        >
-                          {localidad.nombre}, {localidad.pais}
-                        </SelectItem>
-                      ))}
+                      {Object.values(localidades)
+                        .filter(loc => formData.tipo_viaje === 'ida' ? loc.pais === 'Chile' : loc.pais === 'Argentina')
+                        .map((origen) => (
+                          <SelectItem 
+                            key={origen.id_localidad} 
+                            value={origen.id_localidad.toString()}
+                          >
+                            {origen.nombre}, {origen.pais}
+                          </SelectItem>
+                        ))}
                     </SelectContent>
                   </Select>
                   {validationErrors.id_origen && (
@@ -953,20 +1052,22 @@ export function NewViajeDialog({
                   <Select
                     value={formData.id_destino?.toString() || ""}
                     onValueChange={(value) => handleSelectChange('id_destino', value)}
-                    disabled={isLoading || localidades.length === 0}
+                    disabled={isLoading || Object.keys(localidades).length === 0}
                   >
                     <SelectTrigger className={validationErrors.id_destino ? "border-destructive" : ""}>
-                      <SelectValue placeholder={localidades.length === 0 ? "Cargando localidades..." : "Seleccionar destino"} />
+                      <SelectValue placeholder={Object.keys(localidades).length === 0 ? "Cargando destinos..." : "Seleccionar destino"} />
                     </SelectTrigger>
                     <SelectContent>
-                      {localidades.map((localidad) => (
-                        <SelectItem 
-                          key={localidad.id_localidad} 
-                          value={localidad.id_localidad.toString()}
-                        >
-                          {localidad.nombre}, {localidad.pais}
-                        </SelectItem>
-                      ))}
+                      {Object.values(localidades)
+                        .filter(loc => formData.tipo_viaje === 'ida' ? loc.pais === 'Argentina' : loc.pais === 'Chile')
+                        .map((destino) => (
+                          <SelectItem 
+                            key={destino.id_localidad} 
+                            value={destino.id_localidad.toString()}
+                          >
+                            {destino.nombre}, {destino.pais}
+                          </SelectItem>
+                        ))}
                     </SelectContent>
                   </Select>
                   {validationErrors.id_destino && (
