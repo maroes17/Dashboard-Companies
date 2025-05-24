@@ -32,12 +32,23 @@ export const ViajeTable = ({
   // Función para obtener la clase de estado
   const getEstadoClassName = (estado: string) => {
     switch (estado) {
-      case 'planificado': return 'bg-gray-300 text-gray-800';
-      case 'en_ruta': return 'bg-sky-400 text-white';
-      case 'incidente': return 'bg-yellow-400 text-gray-800';
-      case 'realizado': return 'bg-green-500 text-white';
-      case 'cancelado': return 'bg-red-500 text-white';
-      default: return 'bg-gray-300 text-gray-800';
+      case 'planificado': return 'bg-blue-500';
+      case 'en_ruta': return 'bg-green-500';
+      case 'incidente': return 'bg-amber-500';
+      case 'realizado': return 'bg-green-700';
+      case 'cancelado': return 'bg-red-500';
+      default: return 'bg-gray-500';
+    }
+  };
+
+  // Función para obtener la clase de prioridad
+  const getPrioridadClassName = (prioridad: string) => {
+    switch (prioridad) {
+      case 'baja': return 'bg-blue-500';
+      case 'media': return 'bg-green-500';
+      case 'alta': return 'bg-amber-500';
+      case 'urgente': return 'bg-red-500';
+      default: return 'bg-gray-500';
     }
   };
 
@@ -51,9 +62,9 @@ export const ViajeTable = ({
             <th className="h-12 px-4 text-left align-middle font-medium">Origen - Destino</th>
             <th className="h-12 px-4 text-left align-middle font-medium">Fechas</th>
             <th className="h-12 px-4 text-left align-middle font-medium">Cliente</th>
-            <th className="h-12 px-4 text-left align-middle font-medium">Equipo</th>
-            <th className="h-12 px-4 text-left align-middle font-medium">Contenedor</th>
+            <th className="h-12 px-4 text-left align-middle font-medium">Conductor</th>
             <th className="h-12 px-4 text-left align-middle font-medium">Estado</th>
+            <th className="h-12 px-4 text-left align-middle font-medium">Prioridad</th>
             <th className="h-12 px-4 text-center align-middle font-medium">Acciones</th>
           </tr>
         </thead>
@@ -70,11 +81,11 @@ export const ViajeTable = ({
                 <div className="flex flex-col gap-1">
                   <div className="flex items-center gap-1">
                     <MapPin className="h-3 w-3 text-blue-500" />
-                    <span>{localidades[viaje.id_origen] ? `${localidades[viaje.id_origen].nombre}, ${localidades[viaje.id_origen].pais}` : "Origen desconocido"}</span>
+                    <span>{localidades[viaje.id_origen]?.nombre || "Origen desconocido"}</span>
                   </div>
                   <div className="flex items-center gap-1">
                     <MapPin className="h-3 w-3 text-red-500" />
-                    <span>{localidades[viaje.id_destino] ? `${localidades[viaje.id_destino].nombre}, ${localidades[viaje.id_destino].pais}` : "Destino desconocido"}</span>
+                    <span>{localidades[viaje.id_destino]?.nombre || "Destino desconocido"}</span>
                   </div>
                 </div>
               </td>
@@ -82,11 +93,11 @@ export const ViajeTable = ({
                 <div className="flex flex-col gap-1">
                   <div className="flex items-center gap-1 text-xs">
                     <Calendar className="h-3 w-3" />
-                    <span>Salida: {format(new Date(viaje.fecha_salida_programada), "dd/MM/yyyy HH:mm", { locale: es })}</span>
+                    <span>Salida: {format(new Date(viaje.fecha_salida_programada), "dd/MM/yyyy", { locale: es })}</span>
                   </div>
                   <div className="flex items-center gap-1 text-xs">
-                    <Calendar className="h-3 w-3" />
-                    <span>Llegada: {format(new Date(viaje.fecha_llegada_programada), "dd/MM/yyyy HH:mm", { locale: es })}</span>
+                    <Clock className="h-3 w-3" />
+                    <span>Hora: {format(new Date(viaje.fecha_salida_programada), "HH:mm", { locale: es })}</span>
                   </div>
                 </div>
               </td>
@@ -104,26 +115,28 @@ export const ViajeTable = ({
               </td>
               <td className="p-4 align-middle">
                 <div className="flex flex-col gap-1">
-                  <div className="flex items-center gap-1 text-xs">
+                  <div className="flex items-center gap-1">
                     <User className="h-3 w-3" />
-                    <span>{viaje.id_chofer ? conductores[viaje.id_chofer]?.nombre_completo || "Chofer no encontrado" : "Sin chofer"}</span>
+                    <span>{viaje.id_chofer ? conductores[viaje.id_chofer]?.nombre_completo || "No encontrado" : "No asignado"}</span>
                   </div>
-                  <div className="flex items-center gap-1 text-xs">
+                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
                     <Truck className="h-3 w-3" />
-                    <span>{viaje.id_flota ? vehiculos[viaje.id_flota]?.patente || "Vehículo no encontrado" : "Sin vehículo"}</span>
+                    <span>{viaje.id_flota ? vehiculos[viaje.id_flota]?.patente || "No encontrado" : "Sin vehículo"}</span>
                   </div>
-                  <div className="flex items-center gap-1 text-xs">
+                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
                     <Package className="h-3 w-3" />
-                    <span>{viaje.id_semirremolque ? semirremolques[viaje.id_semirremolque]?.patente || "Semirremolque no encontrado" : "Sin semirremolque"}</span>
+                    <span>{viaje.id_semirremolque ? semirremolques[viaje.id_semirremolque]?.patente || "No encontrado" : "Sin semirremolque"}</span>
                   </div>
                 </div>
               </td>
               <td className="p-4 align-middle">
-                <span className="font-mono">{viaje.contenedor?.toUpperCase() || "No especificado"}</span>
-              </td>
-              <td className="p-4 align-middle">
                 <Badge className={getEstadoClassName(viaje.estado)}>
                   {viaje.estado.replace('_', ' ')}
+                </Badge>
+              </td>
+              <td className="p-4 align-middle">
+                <Badge className={getPrioridadClassName(viaje.prioridad)}>
+                  {viaje.prioridad}
                 </Badge>
               </td>
               <td className="p-4 align-middle">
@@ -203,7 +216,7 @@ export const ViajeTable = ({
 
           {viajes.length === 0 && (
             <tr>
-              <td colSpan={9} className="p-8 text-center">
+              <td colSpan={8} className="p-8 text-center">
                 <div className="flex flex-col items-center justify-center py-4">
                   <Package className="h-12 w-12 text-muted-foreground mb-4" />
                   <h3 className="text-lg font-medium">No se encontraron viajes</h3>

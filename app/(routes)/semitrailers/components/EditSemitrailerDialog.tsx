@@ -37,7 +37,7 @@ export function EditSemitrailerDialog({
   onSave
 }: EditSemitrailerDialogProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [formError, setFormError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   
   // Campos del formulario
   const [patente, setPatente] = useState("");
@@ -71,45 +71,61 @@ export function EditSemitrailerDialog({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!semitrailer) return;
-    
-    // Validaciones
-    if (!patente.trim()) {
-      setFormError("La patente es obligatoria");
+    setIsSubmitting(true);
+    setError(null);
+
+    if (!semitrailer) {
+      setError('No se encontró el semirremolque a editar');
+      setIsSubmitting(false);
       return;
     }
-    
-    if (!estado) {
-      setFormError("El estado es obligatorio");
-      return;
-    }
-    
+
     try {
-      setFormError(null);
-      setIsSubmitting(true);
-      
-      // Crear objeto con datos actualizados
+      // Validar campos requeridos
+      if (!patente || !tipo || !marca || !modelo || !anio) {
+        throw new Error('Por favor complete todos los campos requeridos');
+      }
+
+      // Validar año
+      const currentYear = new Date().getFullYear();
+      if (anio < 1900 || anio > currentYear) {
+        throw new Error(`El año debe estar entre 1900 y ${currentYear}`);
+      }
+
+      // Validar fechas
+      if (fechaUltimaRevision && vencimientoRevisionTecnica) {
+        const ultimaRevision = new Date(fechaUltimaRevision);
+        const vencimiento = new Date(vencimientoRevisionTecnica);
+        
+        if (ultimaRevision > vencimiento) {
+          throw new Error('La fecha de última revisión no puede ser posterior al vencimiento de la revisión técnica');
+        }
+      }
+
+      // Actualizar el semirremolque
       const updatedSemitrailer: Semirremolque = {
-        ...semitrailer,
-        patente: patente.trim().toUpperCase(),
+        id_semirremolque: semitrailer.id_semirremolque,
+        patente: patente.toUpperCase(),
         nro_genset: nroGenset.trim() || undefined,
-        tipo: tipo.trim() || undefined,
-        marca: marca.trim() || undefined,
-        modelo: modelo.trim() || undefined,
+        tipo: tipo.trim(),
+        marca: marca.trim(),
+        modelo: modelo.trim(),
         anio: anio,
         estado: estado as any,
-        fecha_ingreso: fechaIngreso || undefined,
+        fecha_ingreso: fechaIngreso || semitrailer.fecha_ingreso,
         fecha_ultima_revision: fechaUltimaRevision || undefined,
         vencimiento_revision_tecnica: vencimientoRevisionTecnica || undefined,
-        observaciones: observaciones.trim() || undefined
+        observaciones: observaciones.trim() || undefined,
+        actualizado_en: new Date().toISOString(),
+        creado_en: semitrailer.creado_en,
+        asignado_a_flota_id: semitrailer.asignado_a_flota_id
       };
-      
+
       await onSave(updatedSemitrailer);
       onOpenChange(false);
     } catch (error: any) {
       console.error('Error al actualizar semirremolque:', error);
-      setFormError(error.message || 'Ocurrió un error al guardar los cambios');
+      setError(error.message || 'Error al actualizar el semirremolque');
     } finally {
       setIsSubmitting(false);
     }
@@ -128,9 +144,9 @@ export function EditSemitrailerDialog({
         </DialogHeader>
         
         <form onSubmit={handleSubmit} className="space-y-4 py-4">
-          {formError && (
+          {error && (
             <div className="bg-red-50 text-red-500 p-3 rounded-md text-sm">
-              {formError}
+              {error}
             </div>
           )}
           

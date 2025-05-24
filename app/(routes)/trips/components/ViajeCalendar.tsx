@@ -24,26 +24,26 @@ const localizer = dateFnsLocalizer({
 
 // Estilos para los eventos según el estado
 const eventStyleGetter = (event: any) => {
-  let backgroundColor = '#e2e8f0';  // Gris por defecto (planificado)
+  let backgroundColor = '#3182ce';  // Azul por defecto (planificado)
   
   switch (event.estado) {
     case 'planificado':
-      backgroundColor = '#e2e8f0'; // Gris
+      backgroundColor = '#3182ce'; // Azul
       break;
     case 'en_ruta':
-      backgroundColor = '#38bdf8'; // Celeste
+      backgroundColor = '#38a169'; // Verde
       break;
     case 'incidente':
-      backgroundColor = '#facc15'; // Amarillo
+      backgroundColor = '#d69e2e'; // Amarillo
       break;
     case 'realizado':
-      backgroundColor = '#22c55e'; // Verde
+      backgroundColor = '#2f855a'; // Verde oscuro
       break;
     case 'cancelado':
-      backgroundColor = '#ef4444'; // Rojo
+      backgroundColor = '#e53e3e'; // Rojo
       break;
     default:
-      backgroundColor = '#e2e8f0'; // Gris
+      backgroundColor = '#718096'; // Gris
   }
   
   return {
@@ -51,7 +51,7 @@ const eventStyleGetter = (event: any) => {
       backgroundColor,
       borderRadius: '4px',
       opacity: 0.8,
-      color: event.estado === 'planificado' || event.estado === 'incidente' ? '#1f2937' : 'white',
+      color: 'white',
       border: '0',
       display: 'block',
       padding: '2px 5px',

@@ -4,7 +4,8 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Search, Filter, PlusCircle, FilterX, MoreHorizontal, Trash2, UserCircle2, Link, Truck } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { Fleet, Driver, Semirremolque, supabase } from "@/lib/supabase";
+import { toast } from "@/components/ui/use-toast";
+import type { Fleet, Driver, Semirremolque } from "@/lib/supabase";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/use-toast";
 import { FleetFilterDialog } from "./components/FleetFilterDialog";
@@ -35,6 +36,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { AssignSemitrailerDialog } from "./components/AssignSemitrailerDialog/AssignSemitrailerDialog";
+import { supabase } from "@/lib/supabase";
 
 // Definir la interfaz FleetFilter localmente
 interface FleetFilter {
@@ -95,6 +98,10 @@ export default function FleetPage() {
 
   // Estado para semirremolques
   const [semirremolques, setSemirremolques] = useState<{[key: number]: Semirremolque}>({});
+  const [deleteSemitrailer, setDeleteSemitrailer] = useState<Semirremolque | null>(null);
+
+  // Estado para asignar semirremolque
+  const [isAssignSemitrailerDialogOpen, setIsAssignSemitrailerDialogOpen] = useState(false);
 
   // Cargar datos desde Supabase
   useEffect(() => {
@@ -104,144 +111,106 @@ export default function FleetPage() {
   const fetchFleet = async () => {
     try {
       setIsLoading(true);
-      console.log('Iniciando carga de flota desde Supabase...');
       
-      // Cargar datos de vehículos
-      const { data, error } = await supabase
+      // Verificar estructura de la tabla choferes
+      const { data: choferesData, error: choferesError } = await supabase
+        .from('choferes')
+        .select('*')
+        .order('id_chofer');
+      
+      console.log('Estructura de la tabla choferes:', {
+        data: choferesData,
+        error: choferesError
+      });
+      
+      // 1. Cargar datos de vehículos con sus asignaciones de choferes
+      const { data: fleetData, error: fleetError } = await supabase
         .from('flota')
-        .select('*');
+        .select(`
+          *,
+          choferes:choferes!id_chofer_asignado(*)
+        `)
+        .order('patente');
       
-      console.log('Respuesta de Supabase para flota:', { data, error });
+      if (fleetError) throw fleetError;
       
-      if (error) {
-        console.error('Error al cargar flota:', error);
-        toast({
-          title: "Error al cargar datos",
-          description: error.message,
-          variant: "destructive",
-        });
-        return;
-      }
-      
-      if (!data || data.length === 0) {
-        console.log('No se encontraron vehículos en la respuesta');
+      if (!fleetData || fleetData.length === 0) {
         setFleet([]);
         return;
       }
-      
-      // Convertir los datos al formato Fleet
-      const formattedData: Fleet[] = data.map(item => ({
-        id_flota: item.id_flota,
-        tipo: item.tipo,
-        categoria: item.categoria,
-        subcategoria: item.subcategoria,
-        patente: item.patente,
-        nro_chasis: item.nro_chasis,
-        marca: item.marca,
-        modelo: item.modelo,
-        anio: item.anio,
-        capacidad: item.capacidad,
-        estado: item.estado as "activo" | "inactivo" | "mantenimiento" | "en_reparacion" | "dado_de_baja",
-        fecha_ingreso: item.fecha_ingreso,
-        id_chofer_asignado: item.id_chofer_asignado,
-        km_actual: item.km_actual,
-        km_ultimo_servicio: item.km_ultimo_servicio,
-        km_proximo_servicio: item.km_proximo_servicio,
-        fecha_ultima_mantencion: item.fecha_ultima_mantencion,
-        fecha_proximo_mantenimiento: item.fecha_proximo_mantenimiento,
-        vencimiento_revision_tecnica: item.vencimiento_revision_tecnica,
-        vencimiento_permiso_circulacion: item.vencimiento_permiso_circulacion,
-        vencimiento_seguro: item.vencimiento_seguro,
-        consumo_promedio: item.consumo_promedio,
-        origen: item.origen,
-        observaciones: item.observaciones,
-        creado_en: item.creado_en,
-        actualizado_en: item.actualizado_en
+
+      // 2. Formatear los datos de la flota
+      const formattedData = fleetData.map(vehicle => ({
+        ...vehicle,
+        chofer: vehicle.choferes || null,
+        semirremolque: null
       }));
-      
-      setFleet(formattedData);
-      
-      // Obtener los IDs de choferes asignados
-      const driverIds = formattedData
-        .filter(vehicle => vehicle.id_chofer_asignado)
-        .map(vehicle => vehicle.id_chofer_asignado as number);
-      
-      // Si hay choferes asignados, cargar sus datos
-      if (driverIds.length > 0) {
-        const { data: driversData, error: driversError } = await supabase
-          .from('choferes')
-          .select('*')
-          .in('id_chofer', driverIds);
-        
-        if (driversError) {
-          console.error('Error al cargar datos de choferes:', driversError);
-        } else if (driversData) {
-          // Convertir a un objeto para acceso rápido por ID
-          const driversMap: {[key: number]: Driver} = {};
-          driversData.forEach(driver => {
-            driversMap[driver.id_chofer] = {
-              id_chofer: driver.id_chofer,
-              nombre_completo: driver.nombre_completo,
-              documento_identidad: driver.documento_identidad,
-              tipo_licencia: driver.tipo_licencia,
-              vencimiento_licencia: driver.vencimiento_licencia,
-              telefono: driver.telefono,
-              email: driver.email,
-              nacionalidad: driver.nacionalidad,
-              direccion: driver.direccion,
-              fecha_nacimiento: driver.fecha_nacimiento,
-              fecha_ingreso: driver.fecha_ingreso,
-              contacto_emergencia: driver.contacto_emergencia,
-              estado: driver.estado,
-              observaciones: driver.observaciones,
-              creado_en: driver.creado_en,
-            };
-          });
-          setDrivers(driversMap);
-        }
-      }
-      
-      // Cargar semirremolques asignados a estos vehículos
-      const vehicleIds = formattedData.map(vehicle => vehicle.id_flota);
+
+      // 3. Cargar los semirremolques asignados
       const { data: semitrailersData, error: semitrailersError } = await supabase
         .from('semirremolques')
         .select('*')
-        .filter('asignado_a_flota_id', 'in', `(${vehicleIds.join(',')})`);
-      
+        .in('asignado_a_flota_id', formattedData.map(v => v.id_flota));
+
       if (semitrailersError) {
         console.error('Error al cargar semirremolques:', semitrailersError);
-      } else if (semitrailersData && semitrailersData.length > 0) {
-        // Crear un mapa de semirremolques para acceso rápido por ID de vehículo
+      } else if (semitrailersData) {
+        // Crear un mapa de semirremolques por ID de flota
         const semitrailersMap: {[key: number]: Semirremolque} = {};
-        semitrailersData.forEach(semirremolque => {
-          if (semirremolque.asignado_a_flota_id) {
-            semitrailersMap[semirremolque.asignado_a_flota_id] = {
-              id_semirremolque: semirremolque.id_semirremolque,
-              patente: semirremolque.patente,
-              nro_genset: semirremolque.nro_genset,
-              tipo: semirremolque.tipo,
-              marca: semirremolque.marca,
-              modelo: semirremolque.modelo,
-              anio: semirremolque.anio,
-              estado: semirremolque.estado,
-              fecha_ingreso: semirremolque.fecha_ingreso,
-              fecha_ultima_revision: semirremolque.fecha_ultima_revision,
-              vencimiento_revision_tecnica: semirremolque.vencimiento_revision_tecnica,
-              observaciones: semirremolque.observaciones,
-              asignado_a_flota_id: semirremolque.asignado_a_flota_id,
-              creado_en: semirremolque.creado_en
-            };
+        semitrailersData.forEach(semitrailer => {
+          if (semitrailer.asignado_a_flota_id) {
+            semitrailersMap[semitrailer.asignado_a_flota_id] = semitrailer;
           }
+        });
+
+        // Actualizar los datos de la flota con los semirremolques asignados
+        formattedData.forEach(vehicle => {
+          vehicle.semirremolque = semitrailersMap[vehicle.id_flota] || null;
+        });
+      }
+
+      setFleet(formattedData);
+
+      // 4. Cargar todos los choferes activos para el diálogo de asignación
+      const { data: driversData, error: driversError } = await supabase
+        .from('choferes')
+        .select('*')
+        .eq('estado', 'activo')
+        .order('nombre_completo');
+
+      if (driversError) {
+        console.error('Error al cargar choferes:', driversError);
+      } else if (driversData) {
+        const driversMap: {[key: number]: Driver} = {};
+        driversData.forEach(driver => {
+          driversMap[driver.id_chofer] = driver;
+        });
+        setDrivers(driversMap);
+      }
+
+      // 5. Cargar todos los semirremolques activos y no asignados para el diálogo de asignación
+      const { data: availableSemitrailersData, error: availableSemitrailersError } = await supabase
+        .from('semirremolques')
+        .select('*')
+        .eq('estado', 'activo')
+        .is('asignado_a_flota_id', null)
+        .order('patente');
+
+      if (availableSemitrailersError) {
+        console.error('Error al cargar semirremolques disponibles:', availableSemitrailersError);
+      } else if (availableSemitrailersData) {
+        const semitrailersMap: {[key: number]: Semirremolque} = {};
+        availableSemitrailersData.forEach(semitrailer => {
+          semitrailersMap[semitrailer.id_semirremolque] = semitrailer;
         });
         setSemirremolques(semitrailersMap);
       }
-      
-      console.log('Datos formateados:', formattedData);
-    } catch (error) {
-      console.error('Error inesperado:', error);
+
+    } catch (error: any) {
+      console.error('Error al cargar flota:', error);
       toast({
-        title: "Error",
-        description: "Ocurrió un error al cargar los datos de flota",
+        title: "Error al cargar datos",
+        description: error.message || "No se pudieron cargar los datos de la flota",
         variant: "destructive",
       });
     } finally {
@@ -654,136 +623,276 @@ export default function FleetPage() {
   };
 
   // Función para asignar un chofer a un vehículo
-  const handleAssignDriver = (vehicle: Fleet) => {
-    setAssignVehicle(vehicle);
-    setIsAssignDriverDialogOpen(true);
-  };
-
-  // Función para realizar la asignación de chofer
-  const assignDriverToVehicle = async (vehicleId: number, driverId: number | null) => {
+  const handleAssignDriver = async (vehicleId: number, driverId: number | null) => {
     try {
-      console.log(`Asignando chofer: vehicleId=${vehicleId}, driverId=${driverId}`);
-      
-      // Preparar la fecha actual para el evento
-      const now = new Date().toISOString();
+      console.log('Iniciando asignación de chofer:', { vehicleId, driverId });
 
-      // Si se está asignando un chofer (driverId no es null), verificar si ya está asignado a otro vehículo
+      // 1. Verificar el estado actual del vehículo
+      const { data: currentVehicle, error: currentError } = await supabase
+        .from('flota')
+        .select('*')
+        .eq('id_flota', vehicleId)
+        .single();
+
+      if (currentError) {
+        console.error('Error al obtener vehículo actual:', currentError);
+        throw new Error(`Error al obtener vehículo: ${currentError.message}`);
+      }
+
+      console.log('Estado actual del vehículo:', currentVehicle);
+
+      // 2. Si se está asignando un chofer, verificar que existe y está activo
       if (driverId !== null) {
-        const { data: assignedVehicles, error: checkError } = await supabase
-          .from('flota')
-          .select('id_flota, patente, marca, modelo')
-          .eq('id_chofer_asignado', driverId)
-          .neq('id_flota', vehicleId);
-          
-        if (checkError) throw checkError;
-        
-        console.log("Vehículos con este chofer asignado:", assignedVehicles);
-        
-        if (assignedVehicles && assignedVehicles.length > 0) {
-          const vehicleInfo = assignedVehicles[0];
-          throw new Error(`El chofer seleccionado ya está asignado al vehículo ${vehicleInfo.patente} (${vehicleInfo.marca} ${vehicleInfo.modelo}). Un chofer solo puede estar asignado a un vehículo a la vez.`);
+        // Primero verificar si el chofer existe en el estado local
+        const localDriver = drivers[driverId];
+        if (!localDriver) {
+          // Si no está en el estado local, intentar obtenerlo de la base de datos
+          const { data: driverData, error: driverError } = await supabase
+            .from('choferes')
+            .select('*')
+            .eq('id_chofer', driverId)
+            .eq('estado', 'activo')
+            .maybeSingle();
+
+          if (driverError) {
+            console.error('Error al verificar chofer:', driverError);
+            throw new Error(`Error al verificar chofer: ${driverError.message}`);
+          }
+
+          if (!driverData) {
+            throw new Error(`No se encontró el chofer con ID ${driverId} o no está activo`);
+          }
+        } else if (localDriver.estado !== 'activo') {
+          throw new Error(`El chofer ${localDriver.nombre_completo} no está activo`);
         }
       }
 
-      // 1. Actualizar la asignación en la tabla flota
-      const updateObj = {
-        id_chofer_asignado: driverId === null ? null : driverId,
-        actualizado_en: now
-      };
-      
-      console.log("Actualizando vehículo con:", updateObj);
-      
-      const { data: updateData, error: updateError } = await supabase
+      // 3. Actualizar el vehículo con el nuevo chofer
+      const { error: updateError } = await supabase
         .from('flota')
-        .update(updateObj)
-        .eq('id_flota', vehicleId)
-        .select();
+        .update({ id_chofer_asignado: driverId })
+        .eq('id_flota', vehicleId);
 
-      if (updateError) throw updateError;
-      
-      console.log("Resultado de la actualización:", updateData);
+      if (updateError) {
+        console.error('Error al actualizar vehículo:', updateError);
+        throw new Error(`Error al actualizar vehículo: ${updateError.message}`);
+      }
 
-      // 2. Registrar el evento de asignación en eventos_flota
-      const descripcion = driverId 
-        ? `[ASIGNACIÓN DE CHOFER] Asignación de chofer ID ${driverId} al vehículo` 
-        : `[ASIGNACIÓN DE CHOFER] Remoción de chofer asignado al vehículo`;
+      // 4. Registrar el evento
+      const now = new Date().toISOString();
+      const eventDescription = driverId === null
+        ? `Se desasignó el chofer del vehículo ${currentVehicle.patente}`
+        : `Se asignó el chofer ID: ${driverId} al vehículo ${currentVehicle.patente}`;
 
       const { error: eventError } = await supabase
         .from('eventos_flota')
         .insert({
           id_flota: vehicleId,
           tipo_evento: 'cambio_estado_manual',
+          descripcion: eventDescription,
           fecha_inicio: now,
-          descripcion: descripcion,
-          resuelto: true
+          fecha_fin: now,
+          estado_resultante: currentVehicle.estado,
+          resuelto: true,
+          creado_en: now
         });
 
       if (eventError) {
-        console.error("Error al registrar evento:", eventError);
-        // No lanzar error para no interrumpir el flujo principal
+        console.error('Error al registrar evento:', eventError);
       }
 
-      // 3. Si se asignó un nuevo chofer, obtener sus datos para mostrarlos
-      if (driverId !== null && !drivers[driverId]) {
-        const { data: driverData, error: driverError } = await supabase
-          .from('choferes')
-          .select('*')
-          .eq('id_chofer', driverId)
-          .single();
-          
-        if (!driverError && driverData) {
-          // Actualizar el state de drivers con el nuevo chofer
-          setDrivers(prev => ({
-            ...prev,
-            [driverId]: {
-              id_chofer: driverData.id_chofer,
-              nombre_completo: driverData.nombre_completo,
-              documento_identidad: driverData.documento_identidad,
-              tipo_licencia: driverData.tipo_licencia,
-              vencimiento_licencia: driverData.vencimiento_licencia,
-              telefono: driverData.telefono,
-              email: driverData.email,
-              nacionalidad: driverData.nacionalidad,
-              direccion: driverData.direccion,
-              fecha_nacimiento: driverData.fecha_nacimiento,
-              fecha_ingreso: driverData.fecha_ingreso,
-              contacto_emergencia: driverData.contacto_emergencia,
-              estado: driverData.estado,
-              observaciones: driverData.observaciones,
-              creado_en: driverData.creado_en,
-            }
-          }));
-        }
-      }
+      // 5. Recargar los datos
+      await fetchFleet();
 
-      // Actualizar la lista localmente
-      setFleet(prev => 
-        prev.map(v => {
-          if (v.id_flota === vehicleId) {
-            return { 
-              ...v, 
-              id_chofer_asignado: driverId === null ? undefined : driverId 
-            };
-          }
-          return v;
-        })
-      );
-
+      // 6. Mostrar mensaje de éxito
       toast({
-        title: driverId ? "Chofer asignado" : "Asignación removida",
-        description: driverId 
-          ? `Se ha asignado el chofer #${driverId} al vehículo exitosamente.`
-          : `Se ha removido la asignación de chofer del vehículo.`,
+        title: "Operación exitosa",
+        description: driverId === null 
+          ? "Chofer desasignado correctamente"
+          : "Chofer asignado correctamente"
       });
 
     } catch (error: any) {
-      console.error("Error al asignar chofer:", error);
+      console.error('Error detallado en handleAssignDriver:', error);
       toast({
-        title: "Error en la asignación",
-        description: error.message || "Ocurrió un error al asignar el chofer al vehículo.",
-        variant: "destructive",
+        title: "Error",
+        description: error.message || "Error al procesar la operación",
+        variant: "destructive"
       });
       throw error;
+    }
+  };
+
+  const handleAssignSemitrailer = async (vehicleId: number, semitrailerId: number | null) => {
+    try {
+      const vehicle = fleet.find((v: Fleet) => v.id_flota === vehicleId);
+      if (!vehicle) {
+        throw new Error('Vehículo no encontrado');
+      }
+
+      // Si hay un semirremolque asignado, primero lo desasignamos
+      if (vehicle.semirremolque) {
+        const { error: unassignError } = await supabase
+          .from('semirremolques')
+          .update({ asignado_a_flota_id: null })
+          .eq('id_semirremolque', vehicle.semirremolque.id_semirremolque);
+
+        if (unassignError) throw unassignError;
+
+        // Registrar evento de desasignación
+        const now = new Date().toISOString();
+        const { error: eventError } = await supabase
+          .from('eventos_flota')
+          .insert({
+            id_flota: vehicleId,
+            tipo_evento: 'cambio_estado_manual',
+            descripcion: `Se desasignó el semirremolque ${vehicle.semirremolque.patente} del vehículo ${vehicle.patente}`,
+            fecha_inicio: now,
+            fecha_fin: now,
+            estado_resultante: vehicle.estado,
+            resuelto: true,
+            creado_en: now
+          });
+
+        if (eventError) {
+          console.error('Error al registrar evento de desasignación:', eventError);
+        }
+      }
+
+      // Si se proporciona un nuevo semirremolque, lo asignamos
+      if (semitrailerId) {
+        const semitrailer = Object.values(semirremolques).find((s: Semirremolque) => s.id_semirremolque === semitrailerId);
+        if (!semitrailer) {
+          throw new Error('Semirremolque no encontrado');
+        }
+
+        if (semitrailer.estado !== 'activo') {
+          throw new Error('El semirremolque seleccionado no está activo');
+        }
+
+        const { error: assignError } = await supabase
+          .from('semirremolques')
+          .update({ asignado_a_flota_id: vehicleId })
+          .eq('id_semirremolque', semitrailerId);
+
+        if (assignError) throw assignError;
+
+        // Registrar evento de asignación
+        const now = new Date().toISOString();
+        const { error: eventError } = await supabase
+          .from('eventos_flota')
+          .insert({
+            id_flota: vehicleId,
+            tipo_evento: 'cambio_estado_manual',
+            descripcion: `Se asignó el semirremolque ${semitrailer.patente} al vehículo ${vehicle.patente}`,
+            fecha_inicio: now,
+            fecha_fin: now,
+            estado_resultante: vehicle.estado,
+            resuelto: true,
+            creado_en: now
+          });
+
+        if (eventError) {
+          console.error('Error al registrar evento de asignación:', eventError);
+        }
+      }
+
+      // Actualizar el estado local
+      await fetchFleet();
+      
+      // Actualizar el vehículo seleccionado en el diálogo de detalles
+      const updatedVehicle = fleet.find((v: Fleet) => v.id_flota === vehicleId);
+      if (updatedVehicle) {
+        setSelectedVehicle(updatedVehicle);
+      }
+
+      toast({
+        title: "Operación exitosa",
+        description: "Semirremolque asignado correctamente"
+      });
+    } catch (error) {
+      console.error('Error al asignar semirremolque:', error);
+      toast({
+        title: "Error",
+        description: "Error al asignar semirremolque",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleDeleteSemitrailer = (semitrailer: Semirremolque) => {
+    setDeleteSemitrailer(semitrailer);
+    setIsDeleteDialogOpen(true);
+  };
+
+  const confirmDeleteSemitrailer = async () => {
+    if (!deleteSemitrailer) return;
+
+    try {
+      setIsDeleteLoading(true);
+
+      // 1. Si el semirremolque está asignado a un vehículo, desasignarlo primero
+      if (deleteSemitrailer.asignado_a_flota_id) {
+        const { error: unassignError } = await supabase
+          .from('flota')
+          .update({ id_semirremolque_asignado: null })
+          .eq('id_flota', deleteSemitrailer.asignado_a_flota_id);
+
+        if (unassignError) throw unassignError;
+      }
+
+      // 2. Eliminar el semirremolque
+      const { error: deleteError } = await supabase
+        .from('semirremolques')
+        .delete()
+        .eq('id_semirremolque', deleteSemitrailer.id_semirremolque);
+
+      if (deleteError) throw deleteError;
+
+      // 3. Si el semirremolque estaba asignado, registrar el evento en la flota
+      if (deleteSemitrailer.asignado_a_flota_id) {
+        const now = new Date().toISOString();
+        const { error: eventError } = await supabase
+          .from('eventos_flota')
+          .insert({
+            id_flota: deleteSemitrailer.asignado_a_flota_id,
+            tipo_evento: "eliminacion_semirremolque",
+            descripcion: `Semirremolque ${deleteSemitrailer.patente} eliminado del sistema`,
+            fecha_inicio: now,
+            fecha_fin: now,
+            estado_resultante: "activo",
+            resuelto: true,
+            creado_en: now,
+            actualizado_en: now
+          });
+
+        if (eventError) {
+          console.error('Error al registrar el evento:', eventError);
+          // No lanzamos el error para no interrumpir el flujo principal
+        }
+      }
+
+      // 4. Actualizar el estado local
+      await fetchFleet();
+
+      toast({
+        title: "Semirremolque eliminado",
+        description: `El semirremolque ${deleteSemitrailer.patente} ha sido eliminado correctamente.`,
+      });
+
+      // 5. Cerrar el diálogo
+      setIsDeleteDialogOpen(false);
+      setDeleteSemitrailer(null);
+
+    } catch (error: any) {
+      console.error('Error al eliminar semirremolque:', error);
+      toast({
+        title: "Error al eliminar",
+        description: error.message || "No se pudo eliminar el semirremolque",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDeleteLoading(false);
     }
   };
 
@@ -943,14 +1052,14 @@ export default function FleetPage() {
                         )}
                       </td>
                       <td className="p-4 align-middle hidden lg:table-cell">
-                        {semirremolques[vehicle.id_flota] ? (
+                        {vehicle.semirremolque ? (
                           <div className="space-y-1">
                             <div className="flex items-center gap-2">
                               <Truck className="h-4 w-4 text-primary" />
-                              <span className="font-medium">{semirremolques[vehicle.id_flota].patente}</span>
+                              <span className="font-medium">{vehicle.semirremolque.patente}</span>
                             </div>
                             <div className="text-sm text-muted-foreground">
-                              {semirremolques[vehicle.id_flota].marca} {semirremolques[vehicle.id_flota].modelo}
+                              {vehicle.semirremolque.marca} {vehicle.semirremolque.modelo}
                             </div>
                           </div>
                         ) : (
@@ -1000,17 +1109,11 @@ export default function FleetPage() {
                               Editar
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem onClick={() => handleAssignDriver(vehicle)}>
-                              Asignar chofer
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleStatusChange(vehicle)}>
-                              Cambiar estado
-                            </DropdownMenuItem>
-                            <DropdownMenuItem 
-                              className="text-red-500"
+                            <DropdownMenuItem
                               onClick={() => handleDeleteVehicle(vehicle)}
+                              className="text-destructive"
                             >
-                              <Trash2 className="h-3.5 w-3.5 mr-2" />
+                              <Trash2 className="mr-2 h-4 w-4" />
                               Eliminar
                             </DropdownMenuItem>
                           </DropdownMenuContent>
@@ -1046,6 +1149,7 @@ export default function FleetPage() {
         onOpenChange={setIsDetailsDialogOpen}
         vehicle={selectedVehicle}
         onAssignDriver={handleAssignDriver}
+        onAssignSemitrailer={handleAssignSemitrailer}
       />
 
       {/* Diálogo de cambio de estado */}
@@ -1126,7 +1230,14 @@ export default function FleetPage() {
         vehicle={assignVehicle}
         open={isAssignDriverDialogOpen}
         onOpenChange={setIsAssignDriverDialogOpen}
-        onAssign={assignDriverToVehicle}
+        onAssign={handleAssignDriver}
+      />
+
+      <AssignSemitrailerDialog
+        open={isAssignSemitrailerDialogOpen}
+        onOpenChange={setIsAssignSemitrailerDialogOpen}
+        vehicle={selectedVehicle}
+        onAssign={handleAssignSemitrailer}
       />
     </div>
   );

@@ -21,14 +21,12 @@ interface SemitrailerDetailsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   semitrailer: Semirremolque | null;
-  onAssignVehicle?: (semitrailer: Semirremolque) => void;
 }
 
 export function SemitrailerDetailsDialog({
   open,
   onOpenChange,
   semitrailer,
-  onAssignVehicle
 }: SemitrailerDetailsDialogProps) {
   const [assignedVehicle, setAssignedVehicle] = useState<Fleet | null>(null);
   const [vehicleLoading, setVehicleLoading] = useState(false);
@@ -334,76 +332,60 @@ export function SemitrailerDetailsDialog({
                   <Truck className="h-5 w-5 text-blue-500" />
                   Vehículo asignado
                 </h3>
-                {onAssignVehicle && (
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onClick={() => onAssignVehicle(semitrailer)}
-                  >
-                    {semitrailer.asignado_a_flota_id ? "Cambiar asignación" : "Asignar a vehículo"}
-                  </Button>
-                )}
               </div>
               
-              {semitrailer.asignado_a_flota_id ? (
-                vehicleLoading ? (
-                  <p className="text-center py-4 text-muted-foreground">Cargando información del vehículo...</p>
-                ) : assignedVehicle ? (
-                  <div className="space-y-2">
-                    <div className="flex justify-between items-center">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium">{assignedVehicle.patente}</span>
-                        <Badge 
-                          variant="outline" 
-                          className={
-                            assignedVehicle.estado === "activo" ? "bg-green-50 text-green-700" :
-                            assignedVehicle.estado === "mantenimiento" ? "bg-yellow-50 text-yellow-700" :
-                            assignedVehicle.estado === "en_reparacion" ? "bg-orange-50 text-orange-700" :
-                            assignedVehicle.estado === "inactivo" ? "bg-gray-50 text-gray-700" :
-                            "bg-red-50 text-red-700" // dado_de_baja
-                          }
-                        >
-                          {assignedVehicle.estado.replace("_", " ")}
-                        </Badge>
-                      </div>
+              {vehicleLoading ? (
+                <p className="text-center py-4 text-muted-foreground">Cargando información del vehículo...</p>
+              ) : assignedVehicle ? (
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">{assignedVehicle.patente}</span>
+                      <Badge 
+                        variant="outline" 
+                        className={
+                          assignedVehicle.estado === "activo" ? "bg-green-50 text-green-700" :
+                          assignedVehicle.estado === "mantenimiento" ? "bg-yellow-50 text-yellow-700" :
+                          assignedVehicle.estado === "en_reparacion" ? "bg-orange-50 text-orange-700" :
+                          assignedVehicle.estado === "inactivo" ? "bg-gray-50 text-gray-700" :
+                          "bg-red-50 text-red-700" // dado_de_baja
+                        }
+                      >
+                        {assignedVehicle.estado.replace("_", " ")}
+                      </Badge>
                     </div>
-                    
-                    <p className="text-sm text-muted-foreground">
-                      {assignedVehicle.marca} {assignedVehicle.modelo} {assignedVehicle.anio}
-                    </p>
+                  </div>
+                  
+                  <p className="text-sm text-muted-foreground">
+                    {assignedVehicle.marca} {assignedVehicle.modelo} {assignedVehicle.anio}
+                  </p>
 
-                    <div className="grid grid-cols-2 gap-2 text-sm mt-2">
-                      <div>
-                        <span className="text-muted-foreground">Tipo: </span>
-                        {assignedVehicle.tipo}
-                      </div>
-                      {assignedVehicle.categoria && (
-                        <div>
-                          <span className="text-muted-foreground">Categoría: </span>
-                          {assignedVehicle.categoria}
-                        </div>
-                      )}
-                      <div>
-                        <span className="text-muted-foreground">Kilometraje: </span>
-                        {assignedVehicle.km_actual?.toLocaleString() || "-"} km
-                      </div>
+                  <div className="grid grid-cols-2 gap-2 text-sm mt-2">
+                    <div>
+                      <span className="text-muted-foreground">Tipo: </span>
+                      {assignedVehicle.tipo}
                     </div>
-                    
-                    {/* Mostrar chofer asignado al vehículo si existe */}
-                    {assignedVehicle.id_chofer_asignado && (
-                      <div className="flex items-center gap-2 mt-2 text-sm">
-                        <UserCircle2 className="h-4 w-4 text-primary" />
-                        <span className="text-muted-foreground">Chofer asignado al vehículo:</span>
-                        <span>ID #{assignedVehicle.id_chofer_asignado}</span>
+                    {assignedVehicle.categoria && (
+                      <div>
+                        <span className="text-muted-foreground">Categoría: </span>
+                        {assignedVehicle.categoria}
                       </div>
                     )}
+                    <div>
+                      <span className="text-muted-foreground">Kilometraje: </span>
+                      {assignedVehicle.km_actual?.toLocaleString() || "-"} km
+                    </div>
                   </div>
-                ) : (
-                  <div className="py-2">
-                    <p>Vehículo #{semitrailer.asignado_a_flota_id}</p>
-                    <p className="text-muted-foreground text-sm mt-1">No se pudo cargar la información detallada</p>
-                  </div>
-                )
+                  
+                  {/* Mostrar chofer asignado al vehículo si existe */}
+                  {assignedVehicle.id_chofer_asignado && (
+                    <div className="flex items-center gap-2 mt-2 text-sm">
+                      <UserCircle2 className="h-4 w-4 text-primary" />
+                      <span className="text-muted-foreground">Chofer asignado al vehículo:</span>
+                      <span>ID #{assignedVehicle.id_chofer_asignado}</span>
+                    </div>
+                  )}
+                </div>
               ) : (
                 <div className="py-4 text-center space-y-2">
                   <p className="text-muted-foreground">No hay vehículo asignado actualmente</p>

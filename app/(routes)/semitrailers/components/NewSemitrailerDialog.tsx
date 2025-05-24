@@ -35,7 +35,7 @@ export function NewSemitrailerDialog({
   onSave
 }: NewSemitrailerDialogProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [formError, setFormError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   
   // Campos del formulario
   const [patente, setPatente] = useState("");
@@ -52,45 +52,54 @@ export function NewSemitrailerDialog({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // Validaciones
-    if (!patente.trim()) {
-      setFormError("La patente es obligatoria");
-      return;
-    }
-    
-    if (!estado) {
-      setFormError("El estado es obligatorio");
-      return;
-    }
-    
+    setIsSubmitting(true);
+    setError(null);
+
     try {
-      setFormError(null);
-      setIsSubmitting(true);
+      // Validar campos requeridos
+      if (!patente || !tipo || !marca || !modelo || !estado || !fechaIngreso || !fechaUltimaRevision || !vencimientoRevisionTecnica) {
+        throw new Error('Por favor complete todos los campos requeridos');
+      }
+
+      // Validar año
+      const currentYear = new Date().getFullYear();
+      if (anio && (anio < 1900 || anio > currentYear)) {
+        throw new Error(`El año debe estar entre 1900 y ${currentYear}`);
+      }
+
+      // Validar fechas
+      const ultimaRevision = new Date(fechaUltimaRevision);
+      const vencimiento = new Date(vencimientoRevisionTecnica);
       
-      // Crear objeto con datos del semirremolque
+      if (ultimaRevision > vencimiento) {
+        throw new Error('La fecha de última revisión no puede ser posterior al vencimiento de la revisión técnica');
+      }
+
+      // Crear el nuevo semirremolque
       const newSemitrailer: Semirremolque = {
-        id_semirremolque: 0, // Este valor lo asignará la base de datos
-        patente: patente.trim().toUpperCase(),
-        nro_genset: nroGenset.trim() || undefined,
-        tipo: tipo.trim() || undefined,
-        marca: marca.trim() || undefined,
-        modelo: modelo.trim() || undefined,
+        id_semirremolque: 0, // Se asignará en la base de datos
+        patente: patente.toUpperCase(),
+        nro_genset: nroGenset || undefined,
+        tipo: tipo,
+        marca: marca,
+        modelo: modelo,
         anio: anio,
         estado: estado as any,
-        fecha_ingreso: fechaIngreso || undefined,
-        fecha_ultima_revision: fechaUltimaRevision || undefined,
-        vencimiento_revision_tecnica: vencimientoRevisionTecnica || undefined,
-        observaciones: observaciones.trim() || undefined,
-        creado_en: new Date().toISOString()
+        fecha_ingreso: fechaIngreso,
+        fecha_ultima_revision: fechaUltimaRevision,
+        vencimiento_revision_tecnica: vencimientoRevisionTecnica,
+        observaciones: observaciones || undefined,
+        creado_en: new Date().toISOString(),
+        actualizado_en: undefined,
+        asignado_a_flota_id: undefined
       };
-      
+
       await onSave(newSemitrailer);
-      resetForm();
       onOpenChange(false);
+      resetForm();
     } catch (error: any) {
       console.error('Error al crear semirremolque:', error);
-      setFormError(error.message || 'Ocurrió un error al guardar el semirremolque');
+      setError(error.message || 'Error al crear el semirremolque');
     } finally {
       setIsSubmitting(false);
     }
@@ -108,7 +117,7 @@ export function NewSemitrailerDialog({
     setFechaUltimaRevision("");
     setVencimientoRevisionTecnica("");
     setObservaciones("");
-    setFormError(null);
+    setError(null);
   };
 
   return (
@@ -125,9 +134,9 @@ export function NewSemitrailerDialog({
         </DialogHeader>
         
         <form onSubmit={handleSubmit} className="space-y-4 py-4">
-          {formError && (
+          {error && (
             <div className="bg-red-50 text-red-500 p-3 rounded-md text-sm">
-              {formError}
+              {error}
             </div>
           )}
           
@@ -141,8 +150,9 @@ export function NewSemitrailerDialog({
                 id="patente"
                 value={patente}
                 onChange={(e) => setPatente(e.target.value)}
-                placeholder="Ej: AB1234"
+                placeholder="Ingrese la patente"
                 className="uppercase"
+                required
               />
             </div>
             
@@ -162,39 +172,48 @@ export function NewSemitrailerDialog({
             {/* Tipo */}
             <div className="space-y-2">
               <Label htmlFor="tipo" className="font-medium">
-                Tipo
+                Tipo *
               </Label>
-              <Input
-                id="tipo"
+              <Select
                 value={tipo}
-                onChange={(e) => setTipo(e.target.value)}
-                placeholder="Ej: Refrigerado"
-              />
+                onValueChange={setTipo}
+                required
+              >
+                <SelectTrigger id="tipo">
+                  <SelectValue placeholder="Seleccione un tipo" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="rampla_plana">Rampla plana</SelectItem>
+                  <SelectItem value="porta_contenedor">Porta contenedor</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             
             {/* Marca */}
             <div className="space-y-2">
               <Label htmlFor="marca" className="font-medium">
-                Marca
+                Marca *
               </Label>
               <Input
                 id="marca"
                 value={marca}
                 onChange={(e) => setMarca(e.target.value)}
                 placeholder="Ej: Randon"
+                required
               />
             </div>
             
             {/* Modelo */}
             <div className="space-y-2">
               <Label htmlFor="modelo" className="font-medium">
-                Modelo
+                Modelo *
               </Label>
               <Input
                 id="modelo"
                 value={modelo}
                 onChange={(e) => setModelo(e.target.value)}
                 placeholder="Ej: SR"
+                required
               />
             </div>
             
@@ -222,6 +241,7 @@ export function NewSemitrailerDialog({
               <Select
                 value={estado}
                 onValueChange={setEstado}
+                required
               >
                 <SelectTrigger id="estado">
                   <SelectValue placeholder="Selecciona un estado" />
@@ -239,39 +259,42 @@ export function NewSemitrailerDialog({
             {/* Fecha de Ingreso */}
             <div className="space-y-2">
               <Label htmlFor="fecha_ingreso" className="font-medium">
-                Fecha de Ingreso
+                Fecha de Ingreso *
               </Label>
               <Input
                 id="fecha_ingreso"
                 type="date"
                 value={fechaIngreso}
                 onChange={(e) => setFechaIngreso(e.target.value)}
+                required
               />
             </div>
             
             {/* Fecha última revisión */}
             <div className="space-y-2">
               <Label htmlFor="fecha_ultima_revision" className="font-medium">
-                Fecha última revisión
+                Fecha última revisión *
               </Label>
               <Input
                 id="fecha_ultima_revision"
                 type="date"
                 value={fechaUltimaRevision}
                 onChange={(e) => setFechaUltimaRevision(e.target.value)}
+                required
               />
             </div>
             
             {/* Vencimiento revisión técnica */}
             <div className="space-y-2">
               <Label htmlFor="vencimiento_revision_tecnica" className="font-medium">
-                Vencimiento Revisión Técnica
+                Vencimiento Revisión Técnica *
               </Label>
               <Input
                 id="vencimiento_revision_tecnica"
                 type="date"
                 value={vencimientoRevisionTecnica}
                 onChange={(e) => setVencimientoRevisionTecnica(e.target.value)}
+                required
               />
             </div>
           </div>
@@ -301,7 +324,7 @@ export function NewSemitrailerDialog({
             </Button>
             <Button
               type="submit"
-              disabled={isSubmitting || !patente.trim()}
+              disabled={isSubmitting || !patente.trim() || !tipo || !marca || !modelo || !estado || !fechaIngreso || !fechaUltimaRevision || !vencimientoRevisionTecnica}
             >
               {isSubmitting ? "Guardando..." : "Guardar"}
             </Button>

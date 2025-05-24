@@ -1,6 +1,7 @@
 "use client";
 
 import { createClient } from '@supabase/supabase-js';
+import { TripStatus } from './types/trips';
 
 // Estas URLs deben provenir de variables de entorno en producción
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://tqgftaqljwxyizdutvqh.supabase.co';
@@ -26,34 +27,36 @@ export type Driver = {
   creado_en: string; // Timestamp ISO
 };
 
-export type Fleet = {
+export interface Fleet {
   id_flota: number;
   tipo: string;
-  categoria?: string;
-  subcategoria?: string;
+  categoria: string;
+  subcategoria: string;
   patente: string;
-  nro_chasis?: string;
+  nro_chasis: string;
   marca: string;
   modelo: string;
-  anio?: number;
-  capacidad?: string;
-  estado: 'activo' | 'inactivo' | 'mantenimiento' | 'en_reparacion' | 'dado_de_baja';
-  fecha_ingreso: string; // Formato ISO YYYY-MM-DD
-  id_chofer_asignado?: number;
-  km_actual?: number;
-  km_ultimo_servicio?: number;
-  km_proximo_servicio?: number;
-  fecha_ultima_mantencion?: string; // Formato ISO YYYY-MM-DD
-  fecha_proximo_mantenimiento?: string; // Formato ISO YYYY-MM-DD
-  vencimiento_revision_tecnica?: string; // Formato ISO YYYY-MM-DD
-  vencimiento_permiso_circulacion?: string; // Formato ISO YYYY-MM-DD
-  vencimiento_seguro?: string; // Formato ISO YYYY-MM-DD
-  consumo_promedio?: number;
-  origen?: string;
-  observaciones?: string;
-  creado_en: string; // Timestamp ISO
-  actualizado_en: string; // Timestamp ISO
-};
+  anio: number;
+  capacidad: string;
+  estado: "activo" | "inactivo" | "mantenimiento" | "en_reparacion" | "dado_de_baja";
+  fecha_ingreso: string;
+  id_chofer_asignado: number | null;
+  km_actual: number;
+  km_ultimo_servicio: number;
+  km_proximo_servicio: number;
+  fecha_ultima_mantencion: string;
+  fecha_proximo_mantenimiento: string;
+  vencimiento_revision_tecnica: string;
+  vencimiento_permiso_circulacion: string;
+  vencimiento_seguro: string;
+  consumo_promedio: number;
+  origen: string;
+  observaciones: string;
+  creado_en: string;
+  actualizado_en: string;
+  chofer?: Driver | null;
+  semirremolque?: Semirremolque | null;
+}
 
 export type FleetEvent = {
   id_evento: number;
@@ -167,19 +170,11 @@ export type Poliza = {
 export type Cliente = {
   id_cliente: number;
   razon_social: string;
-  rut?: string;
-  cuit?: string;
-  nombre_fantasia?: string;
+  cuit: string;
   direccion: string;
-  ciudad?: string;
-  pais?: string;
   telefono: string;
   email: string;
-  contacto_principal?: string;
-  telefono_contacto?: string;
-  email_contacto?: string;
-  estado?: 'activo' | 'inactivo';
-  observaciones?: string;
+  contacto: string;
   creado_en: string;
   actualizado_en: string;
 };
@@ -188,15 +183,13 @@ export type Cliente = {
 export type Localidad = {
   id_localidad: number;
   nombre: string;
-  tipo: 'puerto' | 'aduana' | 'cliente' | 'deposito';
-  direccion?: string;
-  ciudad?: string;
-  pais?: string;
+  pais: string;
+  latitud?: number;
+  longitud?: number;
   es_puerto: boolean;
   es_aduana: boolean;
   es_deposito_contenedores: boolean;
-  creado_en: string;
-  actualizado_en: string;
+  creado_en: string; // Timestamp ISO
 };
 
 // Tipo para viajes
@@ -209,7 +202,7 @@ export type Viaje = {
   id_origen: number;
   id_destino: number;
   tipo_viaje: string;
-  estado: 'planificado' | 'en_ruta' | 'realizado' | 'incidente' | 'cancelado';
+  estado: TripStatus;
   prioridad: 'baja' | 'media' | 'alta' | 'urgente';
   fecha_salida_programada: string;
   fecha_llegada_programada: string;
@@ -226,129 +219,19 @@ export type Viaje = {
   actualizado_en: string;
 };
 
-// Tipo para etapas
-export type TipoEtapa = {
-  id: string;
-  nombre: string;
-  descripcion: string;
-  orden: number;
-  tipo_viaje: 'ida' | 'vuelta';
-  requiere_localidad: boolean;
-  tipo_localidad?: 'puerto' | 'aduana' | 'cliente' | 'deposito';
-  localidades_especificas?: Array<{
-    nombre: string;
-    ciudad: string;
-    pais: string;
-  }>;
-};
-
-// Función para obtener las etapas según el tipo de viaje
-export const getEtapasByTipoViaje = (tipo_viaje: 'ida' | 'vuelta'): TipoEtapa[] => {
-  if (tipo_viaje === 'ida') {
-    return [
-      {
-        id: 'retiro_contenedor',
-        nombre: 'Retiro de Contenedor',
-        descripcion: 'Retiro de contenedor con carga',
-        orden: 1,
-        tipo_viaje: 'ida',
-        requiere_localidad: true,
-        tipo_localidad: 'puerto'
-      },
-      {
-        id: 'aduana',
-        nombre: 'Aduana',
-        descripcion: 'Espera y trámites en aduana',
-        orden: 2,
-        tipo_viaje: 'ida',
-        requiere_localidad: true,
-        tipo_localidad: 'aduana'
-      },
-      {
-        id: 'tramites_puerto_seco',
-        nombre: 'Trámites Puerto Seco',
-        descripcion: 'Espera de instrucciones del cliente para entrega',
-        orden: 3,
-        tipo_viaje: 'ida',
-        requiere_localidad: false
-      },
-      {
-        id: 'entrega_carga',
-        nombre: 'Entrega de Carga',
-        descripcion: 'Entrega de la carga al cliente',
-        orden: 4,
-        tipo_viaje: 'ida',
-        requiere_localidad: true,
-        tipo_localidad: 'cliente'
-      },
-      {
-        id: 'despacho_deposito',
-        nombre: 'Despacho de Contenedor a Depósito',
-        descripcion: 'Entrega de contenedor vacío a depósito',
-        orden: 5,
-        tipo_viaje: 'ida',
-        requiere_localidad: true,
-        tipo_localidad: 'deposito'
-      }
-    ];
-  }
-  return [
-    {
-      id: 'retiro_contenedor',
-      nombre: 'Retiro de Contenedor',
-      descripcion: 'Retiro de contenedor vacío',
-      orden: 1,
-      tipo_viaje: 'vuelta',
-      requiere_localidad: true,
-      tipo_localidad: 'deposito'
-    },
-    {
-      id: 'carga_cliente',
-      nombre: 'Carga en Cliente',
-      descripcion: 'Se carga el contenedor con producto',
-      orden: 2,
-      tipo_viaje: 'vuelta',
-      requiere_localidad: true,
-      tipo_localidad: 'cliente'
-    },
-    {
-      id: 'aduana',
-      nombre: 'Aduana',
-      descripcion: 'Tramites y documentos aduana',
-      orden: 3,
-      tipo_viaje: 'vuelta',
-      requiere_localidad: true,
-      tipo_localidad: 'aduana'
-    },
-    {
-      id: 'descarga_puerto',
-      nombre: 'Descarga en Puerto',
-      descripcion: 'Entrega de contenedor con carga a puerto',
-      orden: 4,
-      tipo_viaje: 'vuelta',
-      requiere_localidad: true,
-      tipo_localidad: 'puerto'
-    }
-  ];
-};
-
 // Tipo para etapas de viaje
 export type EtapaViaje = {
   id_etapa: number;
   id_viaje: number;
+  tipo_etapa: 'carga' | 'transporte' | 'aduana' | 'descarga' | 'entrega_vacio' | 'retiro_vacio';
   id_localidad: number;
-  tipo_etapa: string;
   estado: 'pendiente' | 'en_proceso' | 'completada' | 'cancelada';
-  fecha_programada: string;
-  fecha_realizada?: string;
+  fecha_programada: string; // Timestamp ISO
+  fecha_realizada?: string; // Timestamp ISO
   observaciones?: string;
-  creado_en: string;
-  actualizado_en: string;
-  localidad_temporal?: {
-    nombre: string;
-    ciudad: string;
-    pais: string;
-  };
+  documentos_adjuntos?: any;
+  creado_en: string; // Timestamp ISO
+  actualizado_en: string; // Timestamp ISO
 };
 
 // Tipo para incidentes de viaje
@@ -359,7 +242,7 @@ export type IncidenteViaje = {
   descripcion: string;
   fecha_inicio: string;
   fecha_resolucion?: string;
-  estado: 'pendiente' | 'en_proceso' | 'resuelto';
+  estado: 'reportado' | 'en_proceso' | 'resuelto';
   acciones_tomadas?: string;
   resuelto_por?: string;
   url_foto?: string;

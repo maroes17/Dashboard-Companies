@@ -46,7 +46,6 @@ export function NewClientDialog({
     email_contacto: "",
     estado: "activo",
     observaciones: "",
-    actualizado_en: "",
   });
 
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
@@ -83,10 +82,6 @@ export function NewClientDialog({
     
     if (!formData.razon_social?.trim()) {
       errors.razon_social = "La razón social es obligatoria";
-    }
-    
-    if (!formData.pais?.trim()) {
-      errors.pais = "El país es obligatorio";
     }
     
     if (!formData.rut?.trim()) {
@@ -146,7 +141,6 @@ export function NewClientDialog({
       email_contacto: "",
       estado: "activo",
       observaciones: "",
-      actualizado_en: "",
     });
     setValidationErrors({});
   };
@@ -264,25 +258,14 @@ export function NewClientDialog({
 
             {/* País */}
             <div className="space-y-2">
-              <Label htmlFor="pais">País <span className="text-destructive">*</span></Label>
-              <Select
+              <Label htmlFor="pais">País</Label>
+              <Input
+                id="pais"
+                name="pais"
                 value={formData.pais || ""}
-                onValueChange={(value) => handleSelectChange("pais", value)}
-                required
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Seleccionar país" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Chile">Chile</SelectItem>
-                  <SelectItem value="Argentina">Argentina</SelectItem>
-                  <SelectItem value="Brasil">Brasil</SelectItem>
-                  <SelectItem value="Uruguay">Uruguay</SelectItem>
-                </SelectContent>
-              </Select>
-              {validationErrors.pais && (
-                <p className="text-destructive text-xs">{validationErrors.pais}</p>
-              )}
+                onChange={handleInputChange}
+                disabled={isLoading}
+              />
             </div>
 
             {/* Teléfono */}

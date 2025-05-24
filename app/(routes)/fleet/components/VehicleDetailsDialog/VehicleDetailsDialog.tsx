@@ -14,20 +14,28 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Driver, Fleet, FleetEvent, Semirremolque, supabase } from "@/lib/supabase";
 import { Calendar, Gauge, Wrench, FileText, UserRound, Truck, Clock, AlertCircle } from "lucide-react";
+import { AssignDriverDialog } from "../AssignDriverDialog/AssignDriverDialog";
+import { AssignSemitrailerDialog } from "../AssignSemitrailerDialog/AssignSemitrailerDialog";
+import { toast } from "@/components/ui/use-toast";
+import { useToast } from "@/components/ui/use-toast";
 
 interface VehicleDetailsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   vehicle: Fleet | null;
-  onAssignDriver?: (vehicle: Fleet) => void;
+  onAssignDriver?: (vehicleId: number, driverId: number | null) => Promise<void>;
+  onAssignSemitrailer?: (vehicleId: number, semitrailerId: number | null) => Promise<void>;
 }
 
 export function VehicleDetailsDialog({
   open,
   onOpenChange,
-  vehicle,
-  onAssignDriver
+  vehicle: initialVehicle,
+  onAssignDriver,
+  onAssignSemitrailer
 }: VehicleDetailsDialogProps) {
+  const [vehicle, setVehicle] = useState<Fleet | null>(initialVehicle);
+  const { toast } = useToast();
   const [assignedDriver, setAssignedDriver] = useState<Driver | null>(null);
   const [driverLoading, setDriverLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("general");
@@ -36,6 +44,13 @@ export function VehicleDetailsDialog({
   const [assignedSemitrailer, setAssignedSemitrailer] = useState<Semirremolque | null>(null);
   const [semitrailerLoading, setSemitrailerLoading] = useState(false);
   const [assignmentDrivers, setAssignmentDrivers] = useState<{[key: number]: Driver}>({});
+  const [isAssignDriverDialogOpen, setIsAssignDriverDialogOpen] = useState(false);
+  const [isAssignSemitrailerDialogOpen, setIsAssignSemitrailerDialogOpen] = useState(false);
+
+  // Actualizar el vehículo cuando cambia el prop
+  useEffect(() => {
+    setVehicle(initialVehicle);
+  }, [initialVehicle]);
 
   // Cambiar a la pestaña de asignaciones cuando abre el diálogo si viene desde la asignación
   useEffect(() => {
@@ -53,7 +68,7 @@ export function VehicleDetailsDialog({
     }
   }, [open, vehicle]);
 
-  // Cargar historial de asignaciones
+  // Cargar historial de asignaciones y semirremolque
   useEffect(() => {
     if (open && vehicle?.id_flota) {
       fetchAssignmentHistory(vehicle.id_flota);
@@ -68,38 +83,49 @@ export function VehicleDetailsDialog({
     try {
       setDriverLoading(true);
       
-      const { data, error } = await supabase
+      // Verificar que el ID del chofer sea válido
+      if (!driverId) {
+        setAssignedDriver(null);
+        return;
+      }
+
+      const { data: driver, error } = await supabase
         .from('choferes')
         .select('*')
         .eq('id_chofer', driverId)
         .single();
-      
+
       if (error) {
-        console.error("Error al cargar chofer:", error);
-        return;
+        console.error('Error al cargar chofer:', error);
+        if (error.code === 'PGRST116') {
+          // El chofer no existe
+          setAssignedDriver(null);
+          throw new Error('El chofer asignado ya no existe en la base de datos');
+        }
+        throw new Error(`Error al cargar información del chofer: ${error.message}`);
       }
-      
-      if (data) {
-        setAssignedDriver({
-          id_chofer: data.id_chofer,
-          nombre_completo: data.nombre_completo,
-          documento_identidad: data.documento_identidad,
-          tipo_licencia: data.tipo_licencia,
-          vencimiento_licencia: data.vencimiento_licencia,
-          telefono: data.telefono,
-          email: data.email,
-          nacionalidad: data.nacionalidad,
-          direccion: data.direccion,
-          fecha_nacimiento: data.fecha_nacimiento,
-          fecha_ingreso: data.fecha_ingreso,
-          contacto_emergencia: data.contacto_emergencia,
-          estado: data.estado,
-          observaciones: data.observaciones,
-          creado_en: data.creado_en
-        });
+
+      if (!driver) {
+        setAssignedDriver(null);
+        throw new Error('No se encontró información del chofer');
       }
-    } catch (error) {
-      console.error("Error inesperado:", error);
+
+      // Verificar que el chofer esté activo
+      if (driver.estado !== 'activo') {
+        setAssignedDriver(null);
+        throw new Error(`El chofer ${driver.nombre_completo} no está activo`);
+      }
+
+      setAssignedDriver(driver);
+    } catch (error: any) {
+      console.error('Error en fetchDriverInfo:', error);
+      setAssignedDriver(null);
+      toast({
+        title: "Error",
+        description: error.message || "Error al cargar información del chofer",
+        variant: "destructive",
+      });
+      throw error;
     } finally {
       setDriverLoading(false);
     }
@@ -285,441 +311,422 @@ export function VehicleDetailsDialog({
     return "text-gray-500";
   };
 
+  const onAssign = async (vehicleId: number, driverId: number | null) => {
+    try {
+      console.log('VehicleDetailsDialog - onAssign:', {
+        vehicleId,
+        driverId
+      });
+      
+      if (!vehicle || !onAssignDriver) {
+        throw new Error('No hay vehículo seleccionado o falta la función de asignación');
+      }
+
+      await onAssignDriver(vehicleId, driverId);
+      
+      // Actualizar la información del vehículo
+      const { data: updatedVehicle, error: vehicleError } = await supabase
+        .from('flota')
+        .select(`
+          *,
+          choferes:choferes!id_chofer_asignado(*)
+        `)
+        .eq('id_flota', vehicleId)
+        .single();
+
+      if (vehicleError) {
+        throw new Error(`Error al actualizar información del vehículo: ${vehicleError.message}`);
+      }
+
+      if (updatedVehicle) {
+        setVehicle(updatedVehicle);
+      }
+    } catch (error: any) {
+      console.error('Error en onAssign:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Error al asignar el chofer",
+        variant: "destructive"
+      });
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[700px] max-h-[85vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="text-xl font-semibold">
-            {vehicle.marca} {vehicle.modelo} - {vehicle.patente}
-          </DialogTitle>
-          <DialogDescription>
-            Detalles completos del vehículo
-          </DialogDescription>
+      <DialogContent className="sm:max-w-[900px] max-h-[90vh] overflow-y-auto">
+        <DialogHeader className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <DialogTitle className="text-2xl font-bold">
+                {vehicle.marca} {vehicle.modelo} {vehicle.anio}
+              </DialogTitle>
+              <div className="text-base mt-1">
+                <div className="flex items-center gap-2">
+                  <span className="font-medium">{vehicle.patente}</span>
+                  <Badge 
+                    variant="state"
+                    className={
+                      vehicle.estado === "activo" ? "bg-green-100 text-green-800 dark:bg-green-800/30 dark:text-green-500 border-transparent" :
+                      vehicle.estado === "mantenimiento" ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-800/30 dark:text-yellow-500 border-transparent" :
+                      vehicle.estado === "en_reparacion" ? "bg-orange-100 text-orange-800 dark:bg-orange-800/30 dark:text-orange-500 border-transparent" :
+                      vehicle.estado === "inactivo" ? "bg-gray-100 text-gray-800 dark:bg-gray-800/30 dark:text-gray-500 border-transparent" :
+                      "bg-red-100 text-red-800 dark:bg-red-800/30 dark:text-red-400 border-transparent" // dado_de_baja
+                    }
+                  >
+                    {vehicle.estado.replace("_", " ")}
+                  </Badge>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsAssignDriverDialogOpen(true)}
+                className="gap-2"
+              >
+                <UserRound className="h-4 w-4" />
+                {assignedDriver ? "Cambiar Chofer" : "Asignar Chofer"}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsAssignSemitrailerDialogOpen(true)}
+                className="gap-2"
+              >
+                <Truck className="h-4 w-4" />
+                {assignedSemitrailer ? "Cambiar Semirremolque" : "Asignar Semirremolque"}
+              </Button>
+            </div>
+          </div>
         </DialogHeader>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-2">
-          <TabsList className="grid grid-cols-4 mb-4">
-            <TabsTrigger value="general">General</TabsTrigger>
-            <TabsTrigger value="documents">Documentos</TabsTrigger>
-            <TabsTrigger value="maintenance">Mantenimiento</TabsTrigger>
-            <TabsTrigger value="assignments">Asignaciones</TabsTrigger>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-6">
+          <TabsList className="grid w-full grid-cols-3 mb-6">
+            <TabsTrigger value="general" className="flex items-center gap-2">
+              <FileText className="h-4 w-4" />
+              Información General
+            </TabsTrigger>
+            <TabsTrigger value="assignments" className="flex items-center gap-2">
+              <UserRound className="h-4 w-4" />
+              Asignaciones
+            </TabsTrigger>
+            <TabsTrigger value="maintenance" className="flex items-center gap-2">
+              <Wrench className="h-4 w-4" />
+              Mantenimiento
+            </TabsTrigger>
           </TabsList>
 
-          {/* Pestaña de información general */}
-          <TabsContent value="general" className="space-y-4">
-            <div className="flex justify-between items-start">
-              <div>
-                <h3 className="text-lg font-medium">{vehicle.marca} {vehicle.modelo} {vehicle.anio}</h3>
-                <p className="text-muted-foreground">{vehicle.tipo} {vehicle.categoria && `- ${vehicle.categoria}`}</p>
+          <TabsContent value="general" className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Información Básica */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold flex items-center gap-2">
+                  <FileText className="h-5 w-5 text-primary" />
+                  Información Básica
+                </h3>
+                <div className="grid grid-cols-2 gap-4 p-4 bg-muted/50 rounded-lg">
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-muted-foreground">Patente</p>
+                    <p className="font-medium">{vehicle.patente}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-muted-foreground">Número de Chasis</p>
+                    <p>{vehicle.nro_chasis || "No registrado"}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-muted-foreground">Marca</p>
+                    <p>{vehicle.marca}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-muted-foreground">Modelo</p>
+                    <p>{vehicle.modelo}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-muted-foreground">Año</p>
+                    <p>{vehicle.anio || "No registrado"}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-muted-foreground">Capacidad</p>
+                    <p>{vehicle.capacidad || "No registrado"}</p>
+                  </div>
+                </div>
               </div>
-              <Badge 
-                variant="state"
-                className={
-                  vehicle.estado === "activo" ? "bg-green-100 text-green-800 dark:bg-green-800/30 dark:text-green-500 border-transparent" :
-                  vehicle.estado === "mantenimiento" ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-800/30 dark:text-yellow-500 border-transparent" :
-                  vehicle.estado === "en_reparacion" ? "bg-orange-100 text-orange-800 dark:bg-orange-800/30 dark:text-orange-500 border-transparent" :
-                  vehicle.estado === "inactivo" ? "bg-gray-100 text-gray-800 dark:bg-gray-800/30 dark:text-gray-500 border-transparent" :
-                  "bg-red-100 text-red-800 dark:bg-red-800/30 dark:text-red-400 border-transparent" // dado_de_baja
-                }
-              >
-                {vehicle.estado.replace("_", " ")}
-              </Badge>
-            </div>
 
-            <Separator />
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <p className="text-sm font-medium">Patente</p>
-                <p>{vehicle.patente}</p>
-              </div>
-              <div className="space-y-1">
-                <p className="text-sm font-medium">Número de Chasis</p>
-                <p>{vehicle.nro_chasis || "No registrado"}</p>
-              </div>
-              <div className="space-y-1">
-                <p className="text-sm font-medium">Marca</p>
-                <p>{vehicle.marca}</p>
-              </div>
-              <div className="space-y-1">
-                <p className="text-sm font-medium">Modelo</p>
-                <p>{vehicle.modelo}</p>
-              </div>
-              <div className="space-y-1">
-                <p className="text-sm font-medium">Año</p>
-                <p>{vehicle.anio || "No registrado"}</p>
-              </div>
-              <div className="space-y-1">
-                <p className="text-sm font-medium">Capacidad</p>
-                <p>{vehicle.capacidad || "No registrado"}</p>
-              </div>
-              <div className="space-y-1">
-                <p className="text-sm font-medium">Tipo</p>
-                <p>{vehicle.tipo}</p>
-              </div>
-              <div className="space-y-1">
-                <p className="text-sm font-medium">Categoría</p>
-                <p>{vehicle.categoria || "No registrado"}</p>
-              </div>
-              <div className="space-y-1">
-                <p className="text-sm font-medium">Subcategoría</p>
-                <p>{vehicle.subcategoria || "No registrado"}</p>
-              </div>
-              <div className="space-y-1">
-                <p className="text-sm font-medium">Fecha de Ingreso</p>
-                <p>{formatDate(vehicle.fecha_ingreso)}</p>
-              </div>
-              <div className="space-y-1">
-                <p className="text-sm font-medium">Origen</p>
-                <p>{vehicle.origen || "No registrado"}</p>
+              {/* Clasificación */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold flex items-center gap-2">
+                  <Truck className="h-5 w-5 text-primary" />
+                  Clasificación
+                </h3>
+                <div className="grid grid-cols-2 gap-4 p-4 bg-muted/50 rounded-lg">
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-muted-foreground">Tipo</p>
+                    <p>{vehicle.tipo}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-muted-foreground">Categoría</p>
+                    <p>{vehicle.categoria || "No registrado"}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-muted-foreground">Subcategoría</p>
+                    <p>{vehicle.subcategoria || "No registrado"}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-muted-foreground">Origen</p>
+                    <p>{vehicle.origen || "No registrado"}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-muted-foreground">Fecha de Ingreso</p>
+                    <p>{formatDate(vehicle.fecha_ingreso)}</p>
+                  </div>
+                </div>
               </div>
             </div>
 
-            <Separator />
-
-            <div className="space-y-1">
-              <p className="text-sm font-medium">Observaciones</p>
-              <p className="text-sm">{vehicle.observaciones || "Sin observaciones"}</p>
-            </div>
-          </TabsContent>
-
-          {/* Pestaña de documentos */}
-          <TabsContent value="documents" className="space-y-4">
-            <div className="grid grid-cols-1 gap-4">
-              <div className="border rounded-lg p-4 space-y-3">
-                <div className="flex items-center gap-2">
-                  <Calendar className="h-5 w-5 text-blue-500" />
-                  <h3 className="font-medium">Revisión Técnica</h3>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium">Vencimiento</p>
-                    <p>{formatDate(vehicle.vencimiento_revision_tecnica)}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium">Estado</p>
-                    <p className={getStatusColor(getDocumentStatus(vehicle.vencimiento_revision_tecnica))}>
-                      {getDocumentStatus(vehicle.vencimiento_revision_tecnica)}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="border rounded-lg p-4 space-y-3">
-                <div className="flex items-center gap-2">
-                  <FileText className="h-5 w-5 text-green-500" />
-                  <h3 className="font-medium">Permiso de Circulación</h3>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium">Vencimiento</p>
-                    <p>{formatDate(vehicle.vencimiento_permiso_circulacion)}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium">Estado</p>
-                    <p className={getStatusColor(getDocumentStatus(vehicle.vencimiento_permiso_circulacion))}>
-                      {getDocumentStatus(vehicle.vencimiento_permiso_circulacion)}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="border rounded-lg p-4 space-y-3">
-                <div className="flex items-center gap-2">
-                  <FileText className="h-5 w-5 text-purple-500" />
-                  <h3 className="font-medium">Seguro</h3>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium">Vencimiento</p>
-                    <p>{formatDate(vehicle.vencimiento_seguro)}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium">Estado</p>
-                    <p className={getStatusColor(getDocumentStatus(vehicle.vencimiento_seguro))}>
-                      {getDocumentStatus(vehicle.vencimiento_seguro)}
-                    </p>
-                  </div>
-                </div>
+            {/* Observaciones */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold flex items-center gap-2">
+                <AlertCircle className="h-5 w-5 text-primary" />
+                Observaciones
+              </h3>
+              <div className="p-4 bg-muted/50 rounded-lg">
+                <p className="text-sm">{vehicle.observaciones || "Sin observaciones"}</p>
               </div>
             </div>
           </TabsContent>
 
-          {/* Pestaña de mantenimiento */}
-          <TabsContent value="maintenance" className="space-y-4">
-            <div className="grid grid-cols-1 gap-4">
-              <div className="border rounded-lg p-4 space-y-3">
-                <div className="flex items-center gap-2">
-                  <Gauge className="h-5 w-5 text-blue-500" />
-                  <h3 className="font-medium">Kilometraje</h3>
+          <TabsContent value="assignments" className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Sección de Chofer */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold flex items-center gap-2">
+                  <UserRound className="h-5 w-5 text-primary" />
+                  Chofer Asignado
+                </h3>
+
+                {driverLoading ? (
+                  <div className="text-center py-8 bg-muted/50 rounded-lg">
+                    <p className="text-muted-foreground">Cargando información del chofer...</p>
+                  </div>
+                ) : assignedDriver ? (
+                  <div className="space-y-4 p-4 bg-muted/50 rounded-lg">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h4 className="font-medium text-lg">{assignedDriver.nombre_completo}</h4>
+                        <p className="text-sm text-muted-foreground">{assignedDriver.documento_identidad}</p>
+                      </div>
+                      <Badge variant="outline" className={
+                        assignedDriver.estado === 'activo' 
+                          ? "bg-green-50 text-green-700" 
+                          : assignedDriver.estado === 'inactivo' 
+                            ? "bg-gray-50 text-gray-700"
+                            : "bg-red-50 text-red-700"
+                      }>
+                        {assignedDriver.estado || 'No especificado'}
+                      </Badge>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium text-muted-foreground">Licencia</p>
+                        <p>{assignedDriver.tipo_licencia || "No registrada"}</p>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium text-muted-foreground">Teléfono</p>
+                        <p>{assignedDriver.telefono || "No registrado"}</p>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium text-muted-foreground">Email</p>
+                        <p>{assignedDriver.email || "No registrado"}</p>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium text-muted-foreground">Nacionalidad</p>
+                        <p>{assignedDriver.nacionalidad || "No registrada"}</p>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-8 bg-muted/50 rounded-lg">
+                    <p className="text-muted-foreground">No hay chofer asignado</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Sección de Semirremolque */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold flex items-center gap-2">
+                  <Truck className="h-5 w-5 text-primary" />
+                  Semirremolque Asignado
+                </h3>
+
+                {semitrailerLoading ? (
+                  <div className="text-center py-8 bg-muted/50 rounded-lg">
+                    <p className="text-muted-foreground">Cargando información del semirremolque...</p>
+                  </div>
+                ) : assignedSemitrailer ? (
+                  <div className="space-y-4 p-4 bg-muted/50 rounded-lg">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h4 className="font-medium text-lg">{assignedSemitrailer.patente}</h4>
+                        <p className="text-sm text-muted-foreground">{assignedSemitrailer.tipo}</p>
+                      </div>
+                      <Badge variant="outline" className={
+                        assignedSemitrailer.estado === 'activo' 
+                          ? "bg-green-50 text-green-700" 
+                          : assignedSemitrailer.estado === 'inactivo' 
+                            ? "bg-gray-50 text-gray-700"
+                            : "bg-red-50 text-red-700"
+                      }>
+                        {assignedSemitrailer.estado || 'No especificado'}
+                      </Badge>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium text-muted-foreground">Marca/Modelo</p>
+                        <p>{assignedSemitrailer.marca} {assignedSemitrailer.modelo}</p>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium text-muted-foreground">Año</p>
+                        <p>{assignedSemitrailer.anio}</p>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium text-muted-foreground">Nº Genset</p>
+                        <p>{assignedSemitrailer.nro_genset || "No registrado"}</p>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium text-muted-foreground">Última Revisión</p>
+                        <p>{formatDate(assignedSemitrailer.fecha_ultima_revision)}</p>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-8 bg-muted/50 rounded-lg">
+                    <p className="text-muted-foreground">No hay semirremolque asignado</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Historial de Asignaciones */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold flex items-center gap-2">
+                <Clock className="h-5 w-5 text-primary" />
+                Historial de Asignaciones
+              </h3>
+              {assignmentHistoryLoading ? (
+                <div className="text-center py-8 bg-muted/50 rounded-lg">
+                  <p className="text-muted-foreground">Cargando historial...</p>
                 </div>
-                <div className="grid grid-cols-2 gap-2">
+              ) : assignmentHistory.length > 0 ? (
+                <div className="space-y-3">
+                  {assignmentHistory.map((event, index) => (
+                    <div key={index} className="flex items-start gap-4 p-4 bg-muted/50 rounded-lg">
+                      <div className="flex-shrink-0 mt-1">
+                        {event.descripcion?.includes('CHOFER') ? (
+                          <UserRound className="h-5 w-5 text-primary" />
+                        ) : (
+                          <Truck className="h-5 w-5 text-primary" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium">{event.descripcion}</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {new Date(event.fecha_inicio).toLocaleString('es-ES', {
+                            day: '2-digit',
+                            month: 'short',
+                            year: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8 bg-muted/50 rounded-lg">
+                  <p className="text-muted-foreground">No hay historial de asignaciones</p>
+                </div>
+              )}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="maintenance" className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Kilometraje */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold flex items-center gap-2">
+                  <Gauge className="h-5 w-5 text-primary" />
+                  Kilometraje
+                </h3>
+                <div className="grid grid-cols-2 gap-4 p-4 bg-muted/50 rounded-lg">
                   <div className="space-y-1">
-                    <p className="text-sm font-medium">Actual</p>
-                    <p>{vehicle.km_actual?.toLocaleString() || 0} km</p>
+                    <p className="text-sm font-medium text-muted-foreground">Actual</p>
+                    <p className="font-medium">{vehicle.km_actual?.toLocaleString() || 0} km</p>
                   </div>
                   <div className="space-y-1">
-                    <p className="text-sm font-medium">Último servicio</p>
+                    <p className="text-sm font-medium text-muted-foreground">Último servicio</p>
                     <p>{vehicle.km_ultimo_servicio?.toLocaleString() || "No registrado"} km</p>
                   </div>
                   <div className="space-y-1">
-                    <p className="text-sm font-medium">Próximo servicio</p>
+                    <p className="text-sm font-medium text-muted-foreground">Próximo servicio</p>
                     <p>{vehicle.km_proximo_servicio?.toLocaleString() || "No registrado"} km</p>
                   </div>
                   <div className="space-y-1">
-                    <p className="text-sm font-medium">Consumo promedio</p>
+                    <p className="text-sm font-medium text-muted-foreground">Consumo promedio</p>
                     <p>{vehicle.consumo_promedio ? `${vehicle.consumo_promedio} km/l` : "No registrado"}</p>
                   </div>
                 </div>
               </div>
 
-              <div className="border rounded-lg p-4 space-y-3">
-                <div className="flex items-center gap-2">
-                  <Wrench className="h-5 w-5 text-orange-500" />
-                  <h3 className="font-medium">Mantenimientos</h3>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
+              {/* Mantenimientos */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold flex items-center gap-2">
+                  <Wrench className="h-5 w-5 text-primary" />
+                  Mantenimientos
+                </h3>
+                <div className="grid grid-cols-2 gap-4 p-4 bg-muted/50 rounded-lg">
                   <div className="space-y-1">
-                    <p className="text-sm font-medium">Último mantenimiento</p>
+                    <p className="text-sm font-medium text-muted-foreground">Último mantenimiento</p>
                     <p>{formatDate(vehicle.fecha_ultima_mantencion)}</p>
                   </div>
                   <div className="space-y-1">
-                    <p className="text-sm font-medium">Próximo mantenimiento</p>
+                    <p className="text-sm font-medium text-muted-foreground">Próximo mantenimiento</p>
                     <p>{formatDate(vehicle.fecha_proximo_mantenimiento)}</p>
                   </div>
                 </div>
-                <div className="pt-2">
-                  <Button variant="outline" size="sm" className="w-full">
-                    Ver historial de mantenimientos
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </TabsContent>
-
-          {/* Pestaña de asignaciones */}
-          <TabsContent value="assignments" className="space-y-4">
-            <div className="space-y-4">
-              <div className="border rounded-lg p-4">
-                <div className="flex justify-between items-center mb-3">
-                  <h3 className="font-medium flex items-center gap-2">
-                    <UserRound className="h-5 w-5 text-blue-500" />
-                    Chofer Asignado
-                  </h3>
-                  {onAssignDriver && (
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      onClick={() => onAssignDriver(vehicle)}
-                    >
-                      {vehicle.id_chofer_asignado ? "Cambiar chofer" : "Asignar chofer"}
-                    </Button>
-                  )}
-                </div>
-                
-                {vehicle.id_chofer_asignado ? (
-                  driverLoading ? (
-                    <div className="py-4 text-center text-muted-foreground">
-                      Cargando información del chofer...
-                    </div>
-                  ) : (
-                    assignedDriver ? (
-                      <div className="space-y-3">
-                        <div className="flex justify-between items-center">
-                          <span className="font-medium text-lg">{assignedDriver.nombre_completo}</span>
-                          <Badge 
-                            variant="state"
-                            className={
-                              assignedDriver.estado === "activo" ? "bg-green-100 text-green-800 dark:bg-green-800/30 dark:text-green-500 border-transparent" :
-                              assignedDriver.estado === "suspendido" ? "bg-orange-100 text-orange-800 dark:bg-orange-800/30 dark:text-orange-500 border-transparent" :
-                              "bg-gray-100 text-gray-800 dark:bg-gray-800/30 dark:text-gray-500 border-transparent" // inactivo
-                            }
-                          >
-                            {assignedDriver.estado}
-                          </Badge>
-                        </div>
-                        
-                        <div className="grid grid-cols-2 gap-3 pt-2">
-                          <div className="space-y-1">
-                            <p className="text-sm font-medium">Documento</p>
-                            <p>{assignedDriver.documento_identidad}</p>
-                          </div>
-                          <div className="space-y-1">
-                            <p className="text-sm font-medium">Tipo Licencia</p>
-                            <p>{assignedDriver.tipo_licencia || "No registrado"}</p>
-                          </div>
-                          <div className="space-y-1">
-                            <p className="text-sm font-medium">Vencimiento Licencia</p>
-                            <p className={
-                              isDocumentExpired(assignedDriver.vencimiento_licencia) ? "text-red-600/80" :
-                              isDocumentSoonToExpire(assignedDriver.vencimiento_licencia) ? "text-orange-500" :
-                              "text-green-500"
-                            }>
-                              {formatDate(assignedDriver.vencimiento_licencia)}
-                              {isDocumentExpired(assignedDriver.vencimiento_licencia) && " (Vencida)"}
-                              {isDocumentSoonToExpire(assignedDriver.vencimiento_licencia) && " (Próxima a vencer)"}
-                            </p>
-                          </div>
-                          <div className="space-y-1">
-                            <p className="text-sm font-medium">Contacto</p>
-                            <p>{assignedDriver.telefono || "No registrado"}</p>
-                          </div>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="py-2">
-                        <p>Chofer #{vehicle.id_chofer_asignado}</p>
-                        <p className="text-muted-foreground text-sm mt-1">No se pudo cargar la información detallada</p>
-                      </div>
-                    )
-                  )
-                ) : (
-                  <div className="py-4 text-center space-y-2">
-                    <p className="text-muted-foreground">No hay chofer asignado actualmente</p>
-                    {onAssignDriver && (
-                      <p className="text-sm text-gray-500">
-                        Selecciona "Asignar chofer" para vincular un conductor a este vehículo.
-                      </p>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Semirremolque asignado */}
-              <div className="border rounded-lg p-4">
-                <div className="flex justify-between items-center mb-3">
-                  <h3 className="font-medium flex items-center gap-2">
-                    <Truck className="h-5 w-5 text-green-500" />
-                    Semirremolque Asignado
-                  </h3>
-                </div>
-                
-                {semitrailerLoading ? (
-                  <div className="py-4 text-center text-muted-foreground">
-                    Cargando información del semirremolque...
-                  </div>
-                ) : assignedSemitrailer ? (
-                  <div className="space-y-3">
-                    <div className="flex justify-between items-center">
-                      <span className="font-medium text-lg">{assignedSemitrailer.patente}</span>
-                      <Badge 
-                        variant="state"
-                        className={
-                          assignedSemitrailer.estado === "activo" ? "bg-green-100 text-green-800 dark:bg-green-800/30 dark:text-green-500 border-transparent" :
-                          assignedSemitrailer.estado === "mantenimiento" ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-800/30 dark:text-yellow-500 border-transparent" :
-                          assignedSemitrailer.estado === "en_reparacion" ? "bg-orange-100 text-orange-800 dark:bg-orange-800/30 dark:text-orange-500 border-transparent" :
-                          assignedSemitrailer.estado === "inactivo" ? "bg-gray-100 text-gray-800 dark:bg-gray-800/30 dark:text-gray-500 border-transparent" :
-                          "bg-red-100 text-red-800 dark:bg-red-800/30 dark:text-red-400 border-transparent" // dado_de_baja
-                        }
-                      >
-                        {assignedSemitrailer.estado?.replace("_", " ")}
-                      </Badge>
-                    </div>
-                    
-                    <div className="grid grid-cols-2 gap-3 pt-2">
-                      <div className="space-y-1">
-                        <p className="text-sm font-medium">Tipo</p>
-                        <p>{assignedSemitrailer.tipo || "No registrado"}</p>
-                      </div>
-                      <div className="space-y-1">
-                        <p className="text-sm font-medium">Marca/Modelo</p>
-                        <p>{assignedSemitrailer.marca || ""} {assignedSemitrailer.modelo || ""}</p>
-                      </div>
-                      <div className="space-y-1">
-                        <p className="text-sm font-medium">Año</p>
-                        <p>{assignedSemitrailer.anio || "No registrado"}</p>
-                      </div>
-                      <div className="space-y-1">
-                        <p className="text-sm font-medium">Nº Genset</p>
-                        <p>{assignedSemitrailer.nro_genset || "No registrado"}</p>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="py-4 text-center space-y-2">
-                    <p className="text-muted-foreground">No hay semirremolque asignado actualmente</p>
-                  </div>
-                )}
-              </div>
-
-              {/* Historial de asignaciones */}
-              <div className="border rounded-lg p-4">
-                <h3 className="font-medium mb-3 flex items-center gap-2">
-                  <Clock className="h-5 w-5 text-purple-500" />
-                  Historial de Asignaciones
-                </h3>
-                
-                {assignmentHistoryLoading ? (
-                  <div className="py-4 text-center text-muted-foreground">
-                    Cargando historial de asignaciones...
-                  </div>
-                ) : assignmentHistory.length > 0 ? (
-                  <div className="space-y-3">
-                    {assignmentHistory.map((event) => {
-                      // Extraer ID del chofer si está disponible en la descripción
-                      let driverInfo = null;
-                      if (event.descripcion?.includes('ASIGNACIÓN DE CHOFER')) {
-                        const match = event.descripcion?.match(/ID (\d+)/);
-                        if (match && assignmentDrivers[parseInt(match[1])]) {
-                          driverInfo = assignmentDrivers[parseInt(match[1])];
-                        }
-                      }
-                      
-                      return (
-                        <div key={event.id_evento} className="border-b pb-3 last:border-b-0 last:pb-0">
-                          <div className="flex justify-between">
-                            <div className="flex items-start gap-2">
-                              {event.descripcion?.includes('ASIGNACIÓN DE CHOFER') ? (
-                                <UserRound className="h-4 w-4 mt-1 text-blue-500" />
-                              ) : event.descripcion?.includes('SEMIRREMOLQUE') ? (
-                                <Truck className="h-4 w-4 mt-1 text-green-500" />
-                              ) : (
-                                <AlertCircle className="h-4 w-4 mt-1 text-orange-500" />
-                              )}
-                              <div>
-                                <p className="text-sm">
-                                  {event.descripcion?.includes('Asignación de chofer ID') ? (
-                                    <>
-                                      {driverInfo ? (
-                                        <span>
-                                          Asignación de chofer: <span className="font-medium">{driverInfo.nombre_completo}</span>
-                                        </span>
-                                      ) : (
-                                        <span>
-                                          {event.descripcion}
-                                        </span>
-                                      )}
-                                    </>
-                                  ) : event.descripcion?.includes('Remoción de chofer') ? (
-                                    <span>Chofer removido del vehículo</span>
-                                  ) : (
-                                    <span>{event.descripcion}</span>
-                                  )}
-                                </p>
-                                <p className="text-xs text-muted-foreground">
-                                  {new Date(event.fecha_inicio).toLocaleDateString('es-ES', {
-                                    day: '2-digit',
-                                    month: 'short',
-                                    year: 'numeric',
-                                    hour: '2-digit',
-                                    minute: '2-digit'
-                                  })}
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <p className="text-muted-foreground">No hay datos de asignaciones previas</p>
-                )}
+                <Button variant="outline" size="sm" className="w-full gap-2">
+                  <Wrench className="h-4 w-4" />
+                  Ver historial de mantenimientos
+                </Button>
               </div>
             </div>
           </TabsContent>
         </Tabs>
       </DialogContent>
+
+      {/* Diálogo de asignación de chofer */}
+      <AssignDriverDialog
+        vehicle={vehicle}
+        open={isAssignDriverDialogOpen}
+        onOpenChange={setIsAssignDriverDialogOpen}
+        onAssign={onAssign}
+      />
+
+      {/* Diálogo de asignación de semirremolque */}
+      <AssignSemitrailerDialog
+        open={isAssignSemitrailerDialogOpen}
+        onOpenChange={setIsAssignSemitrailerDialogOpen}
+        vehicle={vehicle}
+        onAssign={async (vehicleId: number, semitrailerId: number | null) => {
+          if (onAssignSemitrailer) {
+            await onAssignSemitrailer(vehicleId, semitrailerId);
+            await fetchAssignedSemitrailer(vehicleId);
+            await fetchAssignmentHistory(vehicleId);
+            setIsAssignSemitrailerDialogOpen(false);
+          }
+        }}
+      />
     </Dialog>
   );
 } 
